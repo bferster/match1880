@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Census Matcher 1880</title>
+	<link rel="stylesheet" href="style.css">
+	<style>
+		/* Add specific styles for this layout if not in style.css */
+		.controls {
+			margin-bottom: 20px;
+		}
+
+		.tab-btn {
+			margin-right: 10px;
+		}
+
+		.tab-btn.active {
+			background-color: var(--primary);
+			color: white;
+			border-color: var(--primary);
+		}
+
+		.badge.score-high {
+			background: #d4edda;
+			color: #155724;
+		}
+
+		.badge.score-med {
+			background: #fff3cd;
+			color: #856404;
+		}
+
+		.badge.score-low {
+			background: #f8d7da;
+			color: #721c24;
+		}
+	</style>
+</head>
+
+<body>
+
+	<div class="app-container">
+		<header>
+			<h1>Census Matcher 1870-1880</h1>
+			<div class="status-panel">
+				<span id="st-1870" class="badge">Waiting for 1870...</span>
+				<span id="st-1880" class="badge">Waiting for 1880...</span>
+			</div>
+		</header>
+
+		<div class="card controls">
+			<p>Click below to match records using the Block strategy.</p>
+			<div class="btn-group">
+				<button id="btn-run" class="btn primary" disabled>Start Matching</button>
+				<button id="btn-save" class="btn success hidden">Save matched.csv</button>
+			</div>
+
+			<div id="progress-container" class="hidden">
+				<div class="progress-bar">
+					<div class="fill" id="progress-bar"></div>
+				</div>
+				<div id="progress-text">0%</div>
+			</div>
+		</div>
+
+		<div class="card log-wrapper">
+			<h3>Processing Log</h3>
+			<div id="log-window" class="log-window"></div>
+		</div>
+
+		<div id="results-panel" class="card hidden">
+			<div class="results-header">
+				<h3>Matched Pairs</h3>
+			</div>
+
+			<div class="tabs">
+				<button class="tab-btn active" data-tab="1">Tier 1 (High) <span id="cnt-1"
+						class="tab-badge">0</span></button>
+				<button class="tab-btn" data-tab="2">Tier 2 (Probable) <span id="cnt-2"
+						class="tab-badge">0</span></button>
+				<button class="tab-btn" data-tab="3">Tier 3 (Possible) <span id="cnt-3"
+						class="tab-badge">0</span></button>
+			</div>
+
+			<div class="matches-list" id="matches-list">
+				<!-- Matches injected here -->
+			</div>
+		</div>
+	</div>
+
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+	<script type="module" src="app.js"></script>
+
+</body>
+
+</html>
