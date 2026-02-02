@@ -69,8 +69,6 @@ Results are always in uppercase. NYSIIS is a soundex-like encoding algorithm, us
 * nysiis_first_name - NYSIIS encoded first-name
 * norm_occupation - Occupations clustered to 21 meta-categories.
 
-
-
 APP IMPLEMENTATION:
 
 Use papaparse to parse the csv files.
@@ -79,8 +77,12 @@ Do not use node.js
 Load the files automatically on page load.
 Add a button to start the matching process {
 	For each person in the 1870 file, find the best match in the 1880 file using the method described in the "Block" matching strategy skill.
+	Tier 1 has a scores above 90.
+	Tier 2 has a scores above 80.
+	Tier 3 has a scores above 50.
 	Add 3 tabs, one for each tier of the matching strategy and list all the matches in the appropriate tab.
-	show waiting icon while rendering previewa.
+	show waiting icon while rendering preview.
+
 	}
 Show all of the matched pairs along with criteria on which the were matched and their scores.
 
@@ -94,6 +96,5 @@ Each row in the matched.csv file should have the following columns {
 	match_evidence - The match evidence from the 1880 file.
 	}
 Show detailed steps of progress when matching in console. 
-
 Use a light UI theme.
 Run on port 5500

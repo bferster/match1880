@@ -301,12 +301,16 @@ const App = {
 							if (res.score >= 35) {
 								// Assign Tier
 								let tier = 3;
-								if (res.score >= 70) tier = 1;
-								else if (res.score >= 50) tier = 2;
+								if (res.score >= 90) tier = 1;
+								else if (res.score >= 80) tier = 2;
+								else if (res.score >= 50) tier = 3;
+								else tier = 0; // Below threshold
 
-								candidateMap.set(pairId, {
-									r70, r80, score: res.score, details: res.details, tier
-								});
+								if (tier > 0) {
+									candidateMap.set(pairId, {
+										r70, r80, score: res.score, details: res.details, tier
+									});
+								}
 							}
 						}
 					}
@@ -382,54 +386,67 @@ const App = {
 		this.renderMatches();
 	},
 
+
 	renderMatches: function () {
 		const $list = $('#matches-list');
-		$list.empty();
+		const $spinner = $('#loading-overlay');
+
+		// Show spinner, hide list
+		$list.addClass('hidden');
+		$spinner.removeClass('hidden');
 
 		let data = [];
 		if (this.currentTab === 1) data = this.tier1;
 		else if (this.currentTab === 2) data = this.tier2;
 		else data = this.tier3;
 
-		if (data.length === 0) {
-			$list.html('<div style="padding:20px; text-align:center; color:#666">No matches in this tier.</div>');
-			return;
-		}
+		// Async render to allow UI paint
+		setTimeout(() => {
+			$list.empty();
 
-		// Render first 200 for perf
+			if (data.length === 0) {
+				$list.html('<div style="padding:20px; text-align:center; color:#666">No matches in this tier.</div>');
+			} else {
+				// Show ALL matches (User requested)
+				// Use document fragment for perf if possible, but string concat is okay for this size
+				let html = '';
+				data.forEach(m => {
+					let cls = 'score-low';
+					if (m.score >= 80) cls = 'score-high';
+					else if (m.score >= 50) cls = 'score-med';
 
-		// Show ALL matches (User requested)
-		data.forEach(m => {
-			let cls = 'score-low';
-			if (m.score >= 80) cls = 'score-high';
-			else if (m.score >= 50) cls = 'score-med';
+					const detailsHtml = (m.details || '').split(', ').map(d => `<span class="ev-tag">${d}</span>`).join('');
 
-			const card = `
-                <div class="match-item">
-                    <div class="match-header">
-                        <span class="badge ${cls}" style="font-size:1.1em">${m.score}</span>
-                        <span class="evidence-list">
-                            ${(m.details || '').split(', ').map(d => `<span class="ev-tag">${d}</span>`).join('')}
-                        </span>
-                    </div>
-                    <div class="match-grid">
-                        <div class="rec">
-                            <span>1870 (Line ${m.r70.line})</span>
-                            <strong>${m.r70.full_name}</strong>
-                            <span>Age: ${m.r70.age} | Born: ${m.r70.birth_year} | ${m.r70.birth_place} | ${m.r70.race}/${m.r70.gender}</span>
-                            <span>Occ: ${m.r70.occupation}</span>
+					html += `
+                        <div class="match-item">
+                            <div class="match-header">
+                                <span class="badge ${cls}" style="font-size:1.1em">${m.score}</span>
+                                <span class="evidence-list">${detailsHtml}</span>
+                            </div>
+                            <div class="match-grid">
+                                <div class="rec">
+                                    <span>1870 (Line ${m.r70.line})</span>
+                                    <strong>${m.r70.full_name}</strong>
+                                    <span>Age: ${m.r70.age} | Born: ${m.r70.birth_year} | ${m.r70.birth_place} | ${m.r70.race}/${m.r70.gender}</span>
+                                    <span>Occ: ${m.r70.occupation}</span>
+                                </div>
+                                <div class="rec">
+                                    <span>1880 (Line ${m.r80.line})</span>
+                                    <strong>${m.r80.full_name}</strong>
+                                    <span>Age: ${m.r80.age} | Born: ${m.r80.birth_year} | ${m.r80.birth_place} | ${m.r80.race}/${m.r80.gender}</span>
+                                    <span>Occ: ${m.r80.occupation}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="rec">
-                            <span>1880 (Line ${m.r80.line})</span>
-                            <strong>${m.r80.full_name}</strong>
-                            <span>Age: ${m.r80.age} | Born: ${m.r80.birth_year} | ${m.r80.birth_place} | ${m.r80.race}/${m.r80.gender}</span>
-                            <span>Occ: ${m.r80.occupation}</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-			$list.append(card);
-		});
+                    `;
+				});
+				$list.html(html);
+			}
+
+			// Hide spinner, show list
+			$spinner.addClass('hidden');
+			$list.removeClass('hidden');
+		}, 50);
 	},
 
 	exportCSV: function () {
