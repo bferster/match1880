@@ -1,0 +1,6 @@
+tmp/
+logs/
+.env
+keys.json
+credentials.json
+token.json

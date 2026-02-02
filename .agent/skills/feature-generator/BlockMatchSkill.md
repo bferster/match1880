@@ -1,22 +1,84 @@
 ---
-name: ABE matching strategy
+name: Block matching strategy
 description: A skill to compare rows in two datasets and return a list of matched pairs.
 ---
 
-The Uniqueness Test (The "Guardrail")
-A match is only valid if the person is "unique" in their own time.
-• In 1870: Look at a person (e.g., John Smith, born 1845). Check if there is anyone else in the 1870 file with the same nysiis_first, nysiis_last, and birth_place who was born within +/- 2 years of 1845.
-• Action: If you find another "John Smith" from the same place born in 1846, you must discard this record from your matching pool. If you can't distinguish them in 1870, you won't be able to accurately link them to 1880.
-2. The Matching Iterations
-For every unique person in your 1870 file, search the 1880 file using this hierarchy:
-• Iteration A (Exact): Search for a unique person in 1880 with the same nysiis_first, nysiis_last, gender, birth_place, and exact birth_year.
-• Iteration B (+/- 1 Year): If no match is found, search 1880 for a unique person within 1 year of the birth year.
-• Iteration C (+/- 2 Years): If still no match, search within 2 years.
-• Rule of Multiples: If at any step you find two potential matches in 1880 (e.g., two John Smiths born in the same window), discard the link.
-3. Bi-directional Verification (The "Double Check")
-To achieve the high accuracy described in the paper:
-1. Run the match from 1870 (Linkage Set 1).
-2. Run the match from 1880 (Linkage Set 2).
-3. Final Sample: Keep only the individuals who are in both sets. If 1870-Person-A points to 1880-Person-B, but 1880-Person-B points to 1870-Person-C, the link is considered unreliable and is discarded.
-4. Special Considerations for your Dataset
-• Tip: Be careful with the race filter. An enumerator might label someone "B" (Black) in 1870 and "M" (Mulatto) in 1880. It is often safer to allow "B" and "M" to match each other while keeping "W" (White) separate.
+# Block matching strategy Skill
+
+## Purpose
+This skill implements a multi-phase record linkage system:
+
+### PHASE 1: BLOCKING (Generate Candidate Pairs)
+Create three blocking strategies to reduce comparison space:
+
+**Block 1:** nysiis_last_name + norm_first_name + gender + race
+- Catches straightforward matches with spelling variations
+
+**Block 2:** norm_first_name + birth_date_10 + gender + race  
+- Catches people whose last name changed (marriage, adoption, transcription errors)
+
+**Block 3:** last_name+ gender + race + birth_place
+- Catches first name variations (nicknames) with distinctive birthplaces
+
+### PHASE 2: SCORING (Calculate Match Quality)
+For each candidate pair, calculate a weighted score:
+
+**High-Value Exact Matches:**
+- last_name exact: +15 points
+- first_name exact: +15 points
+- middle_name exact: +8 points
+- birth_year exact: +10 points
+- age difference 9-11 years: +10 points
+- age difference 8-12 years: +6 points
+- gender exact: +10 points
+- race exact: +8 points
+- birth_place exact: +12 points
+
+**Finding Aid Matches:**
+- nysiis_last_name match: +10 points
+- nysiis_first_name match: +10 points
+- norm_first_name match: +8 points
+- birth_date_10 match: +7 points
+- norm_occupation match: +5 points
+
+**Fuzzy Matches:**
+- last_name Jaro-Winkler ≥0.85: +8 points
+- first_name Jaro-Winkler ≥0.85: +8 points
+- birth_year within ±2 years: +7 points
+- birth_year within ±5 years: +4 points
+- race B/M equivalence: +6 points
+
+**Penalties (Red Flags):**
+- gender mismatch: -50 points
+- age regression (1880 birth_year < 1870 birth_year): -30 points
+- contradictory birth_place: -15 points
+
+### PHASE 4: HOUSEHOLD CONTEXT BOOSTING
+Use high-confidence (Tier 1) matches as "anchors" to help match their household members:
+
+1. For each Tier 1 match, identify their household in both censuses:
+   - 1870: all records with same dwelling number
+   - 1880: all records with same family number
+
+2. For unmatched members of these households, add bonus points:
+   - Head of household name match: +20 points
+   - Spouse match (opposite gender, similar age): +20 points
+   - Child match (using 1880 relation field): +8 points per child
+   - Parent match: +15 points
+   - Co-residence bonus: +15 points
+
+3. Use 1880 relation field to validate family structure:
+   - "Self" = head of household
+   - "Wife" = spouse
+   - "Son"/"Daughter" = children
+   - Other relations: Brother, Sister, Father, Mother, Uncle, Aunt, Nephew, Niece, etc.
+
+### PHASE 5: CONFLICT RESOLUTION
+Handle one-to-many scenarios:
+- If multiple 1880 records match same 1870 record: keep highest score, flag others
+- If multiple 1870 records match same 1880 record: keep highest score, flag others
+- One person can match at most ONE person in the other census
+
+
+
+

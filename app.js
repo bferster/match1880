@@ -301,10 +301,11 @@ const App = {
 							if (res.score >= 35) {
 								// Assign Tier
 								let tier = 3;
-								if (res.score >= 90) tier = 1;
-								else if (res.score >= 80) tier = 2;
-								else if (res.score >= 50) tier = 3;
-								else tier = 0; // Below threshold
+								if (res.score > 89) tier = 1;
+								else if (res.score >= 70 && res.score <= 89) tier = 2;
+								else if (res.score < 69) tier = 3;
+								else tier = 0; // Scores of 69 are excluded
+								// else tier = 0; // Removed strict floor for T3 based on "below 69" prompt, but filter >= 35 applies.
 
 								if (tier > 0) {
 									candidateMap.set(pairId, {
@@ -326,11 +327,156 @@ const App = {
 			} else {
 				this.candidates = Array.from(candidateMap.values());
 				this.log(`Scored ${this.candidates.length} candidate pairs.`);
-				setTimeout(() => this.startResolution(), 100);
+				setTimeout(() => this.startHouseholdBoosting(), 100);
 			}
 		};
 
 		processChunk();
+	},
+
+	startHouseholdBoosting: function () {
+		this.log("Phase 3: Household Context Boosting...");
+		this.progress(60, "Context boosting");
+
+		// 1. Index Households
+		const house70 = new Map(); // dwelling -> [records]
+		const house80 = new Map(); // family -> [records]
+
+		this.data1870.forEach(r => {
+			if (r.dwelling) {
+				if (!house70.has(r.dwelling)) house70.set(r.dwelling, []);
+				house70.get(r.dwelling).push(r);
+			}
+		});
+
+		this.data1880.forEach(r => {
+			if (r.family) {
+				if (!house80.has(r.family)) house80.set(r.family, []);
+				house80.get(r.family).push(r);
+			}
+		});
+
+		// 2. Identify Anchors (Tier 1 Matches)
+		const anchors = this.candidates.filter(c => c.tier === 1);
+		this.log(`Found ${anchors.length} anchor matches.`);
+
+		// Map to track existing best scores to avoid duplicates/downgrades
+		// Key: "line70-line80"
+		const candidateMap = new Map();
+		this.candidates.forEach(c => candidateMap.set(`${c.r70.line}-${c.r80.line}`, c));
+
+		let boosted = 0;
+		let newMatches = 0;
+
+		anchors.forEach(anchor => {
+			const h70 = house70.get(anchor.r70.dwelling) || [];
+			const h80 = house80.get(anchor.r80.family) || [];
+
+			// Compare all members of 1870 household against all members of 1880 household
+			h70.forEach(member70 => {
+				// Skip the anchor itself (already matched)
+				if (member70.line === anchor.r70.line) return;
+
+				h80.forEach(member80 => {
+					// Skip anchor itself
+					if (member80.line === anchor.r80.line) return;
+
+					// Check if this pair already exists
+					const pairId = `${member70.line}-${member80.line}`;
+					let candidate = candidateMap.get(pairId);
+
+					// If not exists, calculate base score first
+					if (!candidate) {
+						const res = calculateScore(member70, member80);
+						// Only consider if base score is somewhat decent (>20) to avoid noise
+						// Or should we allow weak matches to be boosted? 
+						// Prompt says "For unmatched members... add bonus points".
+						// We'll create a candidate object for them.
+						if (res.score > 20) {
+							candidate = { r70: member70, r80: member80, score: res.score, details: res.details, tier: 0 };
+						} else {
+							return;
+						}
+					}
+
+					let bonus = 0;
+					let reasons = [];
+
+					// --- Apply Bonuses ---
+
+					// Co-residence (They are in same house as an Anchor)
+					bonus += 15;
+					reasons.push("Co-residence");
+
+					// Head of Household Match (Name)
+					// Assuming 'dwelling' identifies household, and usually first person is head?
+					// Or strictly check if they ARE the head? 1880 has 'relation' = 'Self'. 1870 doesn't have relation usually.
+					// Simple Logic: If names match, +20. (Already covered by scoring? No, this is extra context bonus)
+					// Let's rely on standard scoring for name, this bonus is for ROLE.
+					// If 1880 is 'Self' (Head_ and 1870 is likely Head (first listed?), add bonus.
+					// Just checking relation string for now.
+					const rel80 = (member80.relation || '').toLowerCase();
+					if (rel80 === 'self' || rel80 === 'head') {
+						// 1870 doesn't denote head explicitly usually, but if name matches heavily, boost it.
+						// Actually, prompt says: "Head of household name match: +20 points".
+						// This implies if they seem to be the head.
+						// I'll add this if JaroWinkler of names is high.
+						if (jaroWinkler(member70.full_name, member80.full_name) > 0.9) {
+							bonus += 20;
+							reasons.push("Head Match");
+						}
+					}
+
+					// Spouse Match
+					// Opposite gender + high name match? Or just context?
+					// "Spouse match (opposite gender, similar age): +20 points"
+					if (member70.gender !== member80.gender) {
+						const ageDiff = Math.abs((parseInt(member70.age) || 0) + 10 - (parseInt(member80.age) || 0));
+						if (ageDiff <= 5) {
+							bonus += 20;
+							reasons.push("Spouse/Context");
+						}
+					}
+
+					// Child Match
+					// "Using 1880 relation field: +8"
+					if (rel80.includes('son') || rel80.includes('dau') || rel80.includes('child')) {
+						bonus += 8;
+						reasons.push("Child Context");
+					}
+
+					// Parent Match
+					if (rel80.includes('father') || rel80.includes('mother')) {
+						bonus += 15;
+						reasons.push("Parent Context");
+					}
+
+					// Update Score
+					if (bonus > 0) {
+						// Clone to avoid mutating shared state if it was a ref (it shouldn't be)
+						candidate.score += bonus;
+						candidate.details += (candidate.details ? ", " : "") + reasons.join(", ");
+
+						// Re-Tier
+						let newTier = 3;
+						if (candidate.score > 89) newTier = 1;
+						else if (candidate.score >= 70 && candidate.score <= 89) newTier = 2;
+						else if (candidate.score < 69) newTier = 3;
+						else newTier = 0;
+
+						if (newTier < candidate.tier && newTier > 0) {
+							candidate.tier = newTier;
+							candidateMap.set(pairId, candidate);
+							boosted++;
+						}
+					}
+				});
+			});
+		});
+
+		this.log(`Boosted ${boosted} candidates via household context.`);
+		this.candidates = Array.from(candidateMap.values());
+		setTimeout(() => this.startResolution(), 100);
 	},
 
 	startResolution: function () {
@@ -412,8 +558,8 @@ const App = {
 				let html = '';
 				data.forEach(m => {
 					let cls = 'score-low';
-					if (m.score >= 80) cls = 'score-high';
-					else if (m.score >= 50) cls = 'score-med';
+					if (m.score >= 90) cls = 'score-high';
+					else if (m.score >= 70) cls = 'score-med';
 
 					const detailsHtml = (m.details || '').split(', ').map(d => `<span class="ev-tag">${d}</span>`).join('');
 
@@ -421,7 +567,6 @@ const App = {
                         <div class="match-item">
                             <div class="match-header">
                                 <span class="badge ${cls}" style="font-size:1.1em">${m.score}</span>
-                                <span class="evidence-list">${detailsHtml}</span>
                             </div>
                             <div class="match-grid">
                                 <div class="rec">
@@ -436,6 +581,9 @@ const App = {
                                     <span>Age: ${m.r80.age} | Born: ${m.r80.birth_year} | ${m.r80.birth_place} | ${m.r80.race}/${m.r80.gender}</span>
                                     <span>Occ: ${m.r80.occupation}</span>
                                 </div>
+                            </div>
+                            <div class="evidence-list">
+                                ${detailsHtml}
                             </div>
                         </div>
                     `;

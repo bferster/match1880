@@ -77,18 +77,21 @@ Do not use node.js
 Load the files automatically on page load.
 Add a button to start the matching process {
 	For each person in the 1870 file, find the best match in the 1880 file using the method described in the "Block" matching strategy skill.
-	Tier 1 has a scores above 90.
-	Tier 2 has a scores above 80.
-	Tier 3 has a scores above 50.
-	Add 3 tabs, one for each tier of the matching strategy and list all the matches in the appropriate tab.
-	show waiting icon while rendering preview.
-
+	Add 3 tabs, one for each tier of the matching strategy.
+	Here are the thresholds for each tier {
+		Tier 1 only includes matches that have a score above 89.
+		Tier 2 only includes matches that have a score between 70 and 89.
+		Tier 3 only includes matches that have a score below 69.
+		}
+	List all the matches within the tier's thresholds in the appropriate tab
+	Limit those included in the preview tabs to the thresholds set.
+	Show waiting icon while rendering preview.
 	}
-Show all of the matched pairs along with criteria on which the were matched and their scores.
+Show all of the matched pairs along with criteria at bottom of matched pair on which the were matched and their scores.
 
 Add a button to save a csv file with the matched pairs to a new file called "matched.csv".
 Each row in the matched.csv file should have the following columns {
-	match_score - The match score from the 1880 file.
+	match_s	core - The match score from the 1880 file.
 	line_1870 - The line number from the 1870 file.
 	All of the columns from the 1870 file.
 	line_1880 - The line number from the 1880 file.
