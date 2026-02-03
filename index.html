@@ -92,9 +92,16 @@
 			</div>
 		</div>
 
-		<div class="card log-wrapper">
-			<h3>Processing Log</h3>
-			<div id="log-window" class="log-window"></div>
+
+		<div id="context-panel" class="card hidden">
+			<div class="context-group">
+				<h4>1870 Census Context (±12 Rows)</h4>
+				<div id="context-1870" class="context-box">Click a match to view context</div>
+			</div>
+			<div class="context-group">
+				<h4>1880 Census Context (±12 Rows)</h4>
+				<div id="context-1880" class="context-box">Click a match to view context</div>
+			</div>
 		</div>
 
 		<div id="results-panel" class="card hidden">
@@ -105,7 +112,7 @@
 			<div class="tabs">
 				<button class="tab-btn active" data-tab="1">Tier 1 (>90) <span id="cnt-1"
 						class="tab-badge">0</span></button>
-				<button class="tab-btn" data-tab="2">Tier 2 (>70) <span id="cnt-2" class="tab-badge">0</span></button>
+				<button class="tab-btn" data-tab="2">Tier 2 (>80) <span id="cnt-2" class="tab-badge">0</span></button>
 				<button class="tab-btn" data-tab="3">Tier 3 (>50) <span id="cnt-3" class="tab-badge">0</span></button>
 			</div>
 
@@ -125,5 +132,6 @@
 	<script type="module" src="app.js"></script>
 
 </body>
+<script>var app;</script>
 
 </html>

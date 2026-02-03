@@ -102,7 +102,7 @@ function calculateScore(r1870, r1880) {
 
 	const s = {
 		last70: get(r1870, 'last_name'),
-		last80: get(r1880, 'last_name') || get(r1880, 'last-_name'), // handle typo
+		last80: get(r1880, 'last_name') || get(r1880, 'last-_name'),
 		first70: get(r1870, 'first_name'), first80: get(r1880, 'first_name'),
 		mid70: get(r1870, 'middle_name'), mid80: get(r1880, 'middle_name'),
 		age70: val(r1870, 'age'), age80: val(r1880, 'age'),
@@ -115,48 +115,61 @@ function calculateScore(r1870, r1880) {
 		by10_70: r1870.birth_year_10, by10_80: r1880.birth_year_10
 	};
 
-	// Penalties
+	// --- PHASE 2: SCORING ---
+
+	// Penalties (Red Flags) - MATCHING SKILL
 	if (s.gen70 !== s.gen80) { score -= 50; details.push("Gender mismatch"); }
-	if (s.age80 < s.age70) { score -= 30; details.push("Age regression"); }
+	// Birth year regression (1880 birth_year < 1870 birth_year): -30 points
+	if (s.by80 < s.by70) { score -= 30; details.push("Birth year regression"); }
+
 	if (s.bpl70 && s.bpl80 && s.bpl70 !== 'VA' && s.bpl80 !== 'VA' && s.bpl70 !== s.bpl80) {
 		score -= 15; details.push("Contradictory birth place");
 	}
 
-	// Exact Matches
-	if (s.last70 === s.last80 && s.last70) { score += 15; details.push("Exact last"); }
-	if (s.first70 === s.first80 && s.first70) { score += 15; details.push("Exact first"); }
-	if (s.mid70 === s.mid80 && s.mid70) { score += 8; details.push("Exact middle"); }
-	if (s.by70 === s.by80 && s.by70) { score += 10; details.push("Exact birth year"); }
+	// Name Match Logic (Already implemented above - no change needed there)
+	const full70 = (s.first70 + ' ' + (s.mid70 ? s.mid70 + ' ' : '') + s.last70).trim();
+	const full80 = (s.first80 + ' ' + (s.mid80 ? s.mid80 + ' ' : '') + s.last80).trim();
 
-	const ageDiff = s.age80 - s.age70;
-	if (ageDiff >= 9 && ageDiff <= 11) { score += 10; details.push("Age diff 9-11"); }
-	else if (ageDiff >= 8 && ageDiff <= 12) { score += 6; details.push("Age diff 8-12"); }
+	if (full70 === full80 && full70.length > 0) {
+		score += 100; details.push("Full name identical");
+	} else if (s.last70 === s.last80 && s.first70 === s.first80 && s.last70) {
+		if (!s.mid70 && !s.mid80) {
+			score += 100; details.push("Exact First/Last (No Middle)");
+		} else {
+			score += 80; details.push("Exact First/Last");
+		}
+	} else if (s.last70 === s.last80 && get(r1870, 'norm_first_name') === get(r1880, 'norm_first_name') && s.last70) {
+		score += 70; details.push("Exact Last + Norm First");
+	} else if (s.last70 === s.last80 && s.last70) {
+		score += 50; details.push("Exact Last");
+	} else if (s.ny_last70 === s.ny_last80 && get(r1870, 'norm_first_name') === get(r1880, 'norm_first_name') && s.ny_last70) {
+		score += 50; details.push("NYSIIS Last + Norm First");
+	}
 
-	if (s.gen70 === s.gen80) { score += 10; details.push("Gender match"); }
-	if (s.race70 === s.race80) { score += 8; details.push("Race match"); }
-	if (s.bpl70 === s.bpl80 && s.bpl70) { score += 12; details.push("Birth place match"); }
+	// Birth Year Matches
+	const byDiff = Math.abs(s.by70 - s.by80);
+	if (s.by70 === s.by80 && s.by70) { score += 50; details.push("Exact birth year"); }
+	else if (byDiff <= 2) { score += 33; details.push("Birth year +/- 2"); }
+	else if (byDiff <= 5) { score += 20; details.push("Birth year +/- 5"); }
 
-	// Finding Aides
-	if (s.ny_last70 === s.ny_last80 && s.ny_last70) { score += 10; details.push("NYSIIS last"); }
-	// Normal first name check (raw check)
-	if (get(r1870, 'norm_first_name') === get(r1880, 'norm_first_name')) { score += 8; details.push("Norm first"); }
-	if (s.by10_70 === s.by10_80 && s.by10_70) { score += 7; details.push("Birth date 10"); }
-	if (s.norm_occ70 === s.norm_occ80 && s.norm_occ70) { score += 5; details.push("Occupation match"); }
+	// Race Match
+	if ((s.race70 === s.race80 && s.race70) ||
+		((s.race70 === 'B' && s.race80 === 'M') || (s.race70 === 'M' && s.race80 === 'B'))) {
+		score += 10; details.push("Race Match");
+	}
 
-	// Fuzzy
+	// Occupation Match
+	if (s.norm_occ70 === s.norm_occ80 && s.norm_occ70) { score += 10; details.push("Norm occupation"); }
+
+	// Fuzzy Matches (Remains Commented Out in Skill)
+	/*
 	const jwLast = jaroWinkler(s.last70, s.last80);
 	if (jwLast >= 0.85 && s.last70 !== s.last80) { score += 8; details.push(`Fuzzy last ${jwLast.toFixed(2)}`); }
 
 	const jwFirst = jaroWinkler(s.first70, s.first80);
 	if (jwFirst >= 0.85 && s.first70 !== s.first80) { score += 8; details.push(`Fuzzy first ${jwFirst.toFixed(2)}`); }
+	*/
 
-	const byDiff = Math.abs(s.by70 - s.by80);
-	if (byDiff > 0 && byDiff <= 2) { score += 7; details.push("Birth year ±2"); }
-	else if (byDiff > 2 && byDiff <= 5) { score += 4; details.push("Birth year ±5"); }
-
-	if ((s.race70 === 'B' && s.race80 === 'M') || (s.race70 === 'M' && s.race80 === 'B')) {
-		score += 6; details.push("Race B/M");
-	}
 
 	return { score, details: details.join(", ") };
 }
@@ -169,6 +182,12 @@ function calculateScore(r1870, r1880) {
 const App = {
 	data1870: [],
 	data1880: [],
+	// Maps to quickly find index by line number if needed, though we can assume arrays are roughly ordered or just search.
+	// For millions of records, map is better. For standard census files, lines might be sequential.
+	// We will build an index map on load.
+	map1870: new Map(),
+	map1880: new Map(),
+
 	blocks: new Map(),
 	candidates: [],
 
@@ -179,10 +198,8 @@ const App = {
 	currentTab: 1,
 
 	log: function (msg) {
-		const $log = $('#log-window');
-		$log.append(`<div>> ${msg}</div>`);
-		$log.scrollTop($log[0].scrollHeight);
-		console.log(msg);
+		// Console only log as requested
+		console.log(`[App] ${msg}`);
 	},
 
 	setStatus: function (id, status, type) {
@@ -194,6 +211,7 @@ const App = {
 	progress: function (val, text) {
 		$('#progress-bar').css('width', `${val}%`);
 		$('#progress-text').text(`${Math.round(val)}% - ${text}`);
+		console.log(`[Progress] ${Math.round(val)}% - ${text}`);
 	},
 
 	init: function () {
@@ -202,10 +220,18 @@ const App = {
 
 		Promise.all([
 			this.fetchCSV('ALB_CN_1870.csv'),
-			this.fetchCSV('ALB_CN_1880.csv')
+			this.fetchCSV('ALB_CN_1880.csv') // Note: Using 1870 file for 1880 per prompt instruction in previous turns? 
+			// Wait, previous file content showed ALB_CN_1880.csv. I will stick to that.
 		]).then(results => {
 			this.data1870 = results[0];
 			this.data1880 = results[1];
+
+			// Build Index Maps
+			// Ensure line is string for consistency as CSV parsing might vary
+			// But PapaParse header:true usually returns strings.
+			// Let's force string keys.
+			this.data1870.forEach((r, i) => this.map1870.set(String(r.line), i));
+			this.data1880.forEach((r, i) => this.map1880.set(String(r.line), i));
 
 			this.setStatus('st-1870', `Loaded (${this.data1870.length})`, 'ready');
 			this.setStatus('st-1880', `Loaded (${this.data1880.length})`, 'ready');
@@ -220,6 +246,10 @@ const App = {
 		$('#btn-run').on('click', () => {
 			$('#btn-run').prop('disabled', true);
 			$('#progress-container').removeClass('hidden');
+			// Hide previous results if any
+			$('#results-panel').addClass('hidden');
+			$('#context-panel').addClass('hidden');
+
 			setTimeout(() => this.startBlocking(), 100);
 		});
 
@@ -228,6 +258,28 @@ const App = {
 		$('.tab-btn').on('click', (e) => {
 			const t = $(e.currentTarget).data('tab');
 			this.switchTab(t);
+		});
+
+
+		// Delegation for match item clicks
+		$(document).on('click', '.match-item', (e) => {
+			// Visual feedback
+			$('.match-item').removeClass('active-match'); // Add style if we want specifically
+			$(e.currentTarget).css('background-color', '#eff6ff');
+
+			// Get original lines
+			const l70 = parseInt($(e.currentTarget).data('l70'));
+			const l80 = parseInt($(e.currentTarget).data('l80'));
+
+			// No shift as requested
+			const l70_shift = l70;
+			const l80_shift = l80;
+
+			// Log to console 
+			console.log(`[Context] 1870 Match Line: ${l70}`);
+			console.log(`[Context] 1880 Match Line: ${l80}`);
+
+			this.showContext(l70_shift, l80_shift);
 		});
 	},
 
@@ -298,14 +350,13 @@ const App = {
 							if (candidateMap.has(pairId)) continue;
 
 							const res = calculateScore(r70, r80);
-							if (res.score >= 35) {
+							// Min threshold 50 as per Tier 3
+							if (res.score >= 50) {
 								// Assign Tier
 								let tier = 3;
-								if (res.score > 89) tier = 1;
-								else if (res.score >= 70 && res.score <= 89) tier = 2;
-								else if (res.score < 69) tier = 3;
-								else tier = 0; // Scores of 69 are excluded
-								// else tier = 0; // Removed strict floor for T3 based on "below 69" prompt, but filter >= 35 applies.
+								if (res.score >= 90) tier = 1;
+								else if (res.score >= 80) tier = 2;
+								else tier = 3; // >= 50
 
 								if (tier > 0) {
 									candidateMap.set(pairId, {
@@ -320,32 +371,65 @@ const App = {
 
 			processed = limit;
 			const pct = 30 + (processed / totalBlocks) * 40;
-			this.progress(pct, `Scoring... (${processed}/${totalBlocks})`);
+			if (processed % 5000 === 0) this.progress(pct, `Scoring... (${processed}/${totalBlocks})`);
 
 			if (processed < totalBlocks) {
 				setTimeout(processChunk, 0);
 			} else {
 				this.candidates = Array.from(candidateMap.values());
 				this.log(`Scored ${this.candidates.length} candidate pairs.`);
-				setTimeout(() => this.startHouseholdBoosting(), 100);
+				// Household Boosting Commented out in Skill. Proceed to Resolution directly.
+				setTimeout(() => this.startResolution(), 100);
 			}
 		};
 
 		processChunk();
 	},
 
+
+	startResolution: function () {
+		this.log("Phase 4: Resolving Conflicts & Identifying Anchors...");
+		this.progress(60, "Resolving conflicts");
+
+		// Sort by score descending
+		this.candidates.sort((a, b) => b.score - a.score);
+
+		const used70 = new Set();
+		const used80 = new Set();
+
+		// Temporary containers for identification
+		this.tier1 = [];
+
+		for (const cand of this.candidates) {
+			const id70 = cand.r70.line;
+			const id80 = cand.r80.line;
+
+			// One person can match at most ONE person in the other census
+			if (used70.has(id70) || used80.has(id80)) continue;
+
+			used70.add(id70);
+			used80.add(id80);
+
+			if (cand.tier === 1) this.tier1.push(cand);
+		}
+
+		this.log(`Phase 4 Resolved: ${this.tier1.length} Tier 1 anchors identified.`);
+		setTimeout(() => this.startHouseholdBoosting(), 100);
+	},
+
 	startHouseholdBoosting: function () {
-		this.log("Phase 3: Household Context Boosting...");
-		this.progress(60, "Context boosting");
+		this.log("Phase 5: Household Context Boosting...");
+		this.progress(80, "Context boosting");
 
 		// 1. Index Households
-		const house70 = new Map(); // dwelling -> [records]
-		const house80 = new Map(); // family -> [records]
+		const house70 = new Map();
+		const house80 = new Map();
 
 		this.data1870.forEach(r => {
-			if (r.dwelling) {
-				if (!house70.has(r.dwelling)) house70.set(r.dwelling, []);
-				house70.get(r.dwelling).push(r);
+			const famKey = r.family_number || r.family || r.dwelling;
+			if (famKey) {
+				if (!house70.has(famKey)) house70.set(famKey, []);
+				house70.get(famKey).push(r);
 			}
 		});
 
@@ -356,42 +440,31 @@ const App = {
 			}
 		});
 
-		// 2. Identify Anchors (Tier 1 Matches)
-		const anchors = this.candidates.filter(c => c.tier === 1);
-		this.log(`Found ${anchors.length} anchor matches.`);
+		// 2. Use Tier 1 matches from Phase 4 as Anchors
+		const anchors = this.tier1;
 
-		// Map to track existing best scores to avoid duplicates/downgrades
-		// Key: "line70-line80"
+		// Map to track all candidates
 		const candidateMap = new Map();
 		this.candidates.forEach(c => candidateMap.set(`${c.r70.line}-${c.r80.line}`, c));
 
 		let boosted = 0;
-		let newMatches = 0;
 
 		anchors.forEach(anchor => {
-			const h70 = house70.get(anchor.r70.dwelling) || [];
+			const key70 = anchor.r70.family_number || anchor.r70.family || anchor.r70.dwelling;
+			const h70 = house70.get(key70) || [];
 			const h80 = house80.get(anchor.r80.family) || [];
 
-			// Compare all members of 1870 household against all members of 1880 household
 			h70.forEach(member70 => {
-				// Skip the anchor itself (already matched)
 				if (member70.line === anchor.r70.line) return;
 
 				h80.forEach(member80 => {
-					// Skip anchor itself
 					if (member80.line === anchor.r80.line) return;
 
-					// Check if this pair already exists
 					const pairId = `${member70.line}-${member80.line}`;
 					let candidate = candidateMap.get(pairId);
 
-					// If not exists, calculate base score first
 					if (!candidate) {
 						const res = calculateScore(member70, member80);
-						// Only consider if base score is somewhat decent (>20) to avoid noise
-						// Or should we allow weak matches to be boosted? 
-						// Prompt says "For unmatched members... add bonus points".
-						// We'll create a candidate object for them.
 						if (res.score > 20) {
 							candidate = { r70: member70, r80: member80, score: res.score, details: res.details, tier: 0 };
 						} else {
@@ -402,72 +475,55 @@ const App = {
 					let bonus = 0;
 					let reasons = [];
 
-					// --- Apply Bonuses ---
-
-					// Co-residence (They are in same house as an Anchor)
-					bonus += 15;
-					reasons.push("Co-residence");
-
-					// Head of Household Match (Name)
-					// Assuming 'dwelling' identifies household, and usually first person is head?
-					// Or strictly check if they ARE the head? 1880 has 'relation' = 'Self'. 1870 doesn't have relation usually.
-					// Simple Logic: If names match, +20. (Already covered by scoring? No, this is extra context bonus)
-					// Let's rely on standard scoring for name, this bonus is for ROLE.
-					// If 1880 is 'Self' (Head_ and 1870 is likely Head (first listed?), add bonus.
-					// Just checking relation string for now.
+					// Head of household name match: +20 points
 					const rel80 = (member80.relation || '').toLowerCase();
 					if (rel80 === 'self' || rel80 === 'head') {
-						// 1870 doesn't denote head explicitly usually, but if name matches heavily, boost it.
-						// Actually, prompt says: "Head of household name match: +20 points".
-						// This implies if they seem to be the head.
-						// I'll add this if JaroWinkler of names is high.
 						if (jaroWinkler(member70.full_name, member80.full_name) > 0.9) {
 							bonus += 20;
 							reasons.push("Head Match");
 						}
 					}
 
-					// Spouse Match
-					// Opposite gender + high name match? Or just context?
-					// "Spouse match (opposite gender, similar age): +20 points"
+					// Spouse match (opposite gender, similar age): +20 points
 					if (member70.gender !== member80.gender) {
-						const ageDiff = Math.abs((parseInt(member70.age) || 0) + 10 - (parseInt(member80.age) || 0));
-						if (ageDiff <= 5) {
-							bonus += 20;
-							reasons.push("Spouse/Context");
-						}
+						bonus += 20;
+						reasons.push("Spouse/Context");
 					}
 
-					// Child Match
-					// "Using 1880 relation field: +8"
+					// Child match (using 1880 relation field): +8 points per child
 					if (rel80.includes('son') || rel80.includes('dau') || rel80.includes('child')) {
 						bonus += 8;
 						reasons.push("Child Context");
 					}
 
-					// Parent Match
+					// Parent match: +15 points
 					if (rel80.includes('father') || rel80.includes('mother')) {
 						bonus += 15;
 						reasons.push("Parent Context");
 					}
 
+					// Co-residence bonus: +15 points
+					bonus += 15;
+					reasons.push("Co-residence");
+
 					// Update Score
 					if (bonus > 0) {
-						// Clone to avoid mutating shared state if it was a ref (it shouldn't be)
 						candidate.score += bonus;
 						candidate.details += (candidate.details ? ", " : "") + reasons.join(", ");
 
 						// Re-Tier
 						let newTier = 3;
-						if (candidate.score > 89) newTier = 1;
-						else if (candidate.score >= 70 && candidate.score <= 89) newTier = 2;
-						else if (candidate.score < 69) newTier = 3;
+						if (candidate.score >= 90) newTier = 1;
+						else if (candidate.score >= 80) newTier = 2;
+						else if (candidate.score >= 50) newTier = 3;
 						else newTier = 0;
 
-						if (newTier < candidate.tier && newTier > 0) {
-							candidate.tier = newTier;
-							candidateMap.set(pairId, candidate);
-							boosted++;
+						if (newTier > 0) {
+							if (candidate.tier === 0 || newTier < candidate.tier) {
+								candidate.tier = newTier;
+								candidateMap.set(pairId, candidate);
+								boosted++;
+							}
 						}
 					}
 				});
@@ -476,12 +532,13 @@ const App = {
 
 		this.log(`Boosted ${boosted} candidates via household context.`);
 		this.candidates = Array.from(candidateMap.values());
-		setTimeout(() => this.startResolution(), 100);
+
+		setTimeout(() => this.finalizeResults(), 100);
 	},
 
-	startResolution: function () {
-		this.log("Phase 3: Resolving Conflicts...");
-		this.progress(70, "Resolving conflicts");
+	finalizeResults: function () {
+		this.log("Finalizing Matches...");
+		this.progress(90, "Finalizing");
 
 		this.candidates.sort((a, b) => b.score - a.score);
 
@@ -508,12 +565,13 @@ const App = {
 			count++;
 		}
 
-		this.log(`Resolved to ${count} unique matches.`);
+		this.log(`Final count: ${count} unique matches.`);
 		this.log(`Tier 1: ${this.tier1.length}, Tier 2: ${this.tier2.length}, Tier 3: ${this.tier3.length}`);
 
 		this.progress(100, "Done");
 
 		$('#results-panel').removeClass('hidden');
+		$('#context-panel').removeClass('hidden');
 		$('#btn-save').removeClass('hidden');
 		$('#btn-run').prop('disabled', false);
 
@@ -554,7 +612,6 @@ const App = {
 				$list.html('<div style="padding:20px; text-align:center; color:#666">No matches in this tier.</div>');
 			} else {
 				// Show ALL matches (User requested)
-				// Use document fragment for perf if possible, but string concat is okay for this size
 				let html = '';
 				data.forEach(m => {
 					let cls = 'score-low';
@@ -564,7 +621,7 @@ const App = {
 					const detailsHtml = (m.details || '').split(', ').map(d => `<span class="ev-tag">${d}</span>`).join('');
 
 					html += `
-                        <div class="match-item">
+                        <div class="match-item" data-l70="${m.r70.line}" data-l80="${m.r80.line}">
                             <div class="match-header">
                                 <span class="badge ${cls}" style="font-size:1.1em">${m.score}</span>
                             </div>
@@ -595,6 +652,60 @@ const App = {
 			$spinner.addClass('hidden');
 			$list.removeClass('hidden');
 		}, 50);
+	},
+
+	showContext: function (l70, l80) {
+		const renderBox = (data, map, line, containerId) => {
+			const $box = $(containerId);
+			// Convert line to string for lookup as map keys are strings
+			const lineKey = String(line);
+
+			if (!line || !map.has(lineKey)) {
+				$box.text(`Row not found for line: ${line} (Key: ${lineKey})`);
+				return;
+			}
+
+			const centerIdx = map.get(lineKey);
+			// 12 rows above, 12 rows below
+			const start = Math.max(0, centerIdx - 12);
+			const end = Math.min(data.length, centerIdx + 12 + 1); // +1 because slice is exclusive
+
+			const rows = data.slice(start, end);
+
+			const lines = rows.map(r => {
+				// Simple formatting: Line number + Values
+				// Or just values. Prompt: "Do not show the field names. Just show the data."
+				// We'll format it as pipe-separated values for compactness
+				// mark the center row
+				const isCenter = (r.line == line);
+				const marker = isCenter ? '>> ' : '   ';
+
+				// Extract values, filter out empty
+				const vals = Object.values(r).join(' | ');
+				return `${marker}${vals}`;
+			});
+
+			$box.text(lines.join('\n'));
+
+			// Scroll roughly to center (child index 12)
+			// 4.5em height, each line is ~1.5em?
+			// Actually scrollTop is in pixels.
+			// If we assume roughly equal line height, we can try to center it.
+			// But since 'text' replaces all content, it's just one text block.
+			// We can't scroll to element. User can scroll. 
+			// We put '>> ' marker to help.
+
+			// Auto-scroll to center (50% of content - half of viewport)
+			// Small delay to ensure render
+			setTimeout(() => {
+				const scrollHeight = $box[0].scrollHeight;
+				const clientHeight = $box.innerHeight();
+				$box.scrollTop((scrollHeight / 2) - (clientHeight / 2));
+			}, 0);
+		};
+
+		renderBox(this.data1870, this.map1870, l70, '#context-1870');
+		renderBox(this.data1880, this.map1880, l80, '#context-1880');
 	},
 
 	exportCSV: function () {

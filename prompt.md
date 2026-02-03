@@ -76,28 +76,43 @@ Use only plain vanilla javascript and jQuery to do this.
 Do not use node.js
 Load the files automatically on page load.
 Add a button to start the matching process {
-	For each person in the 1870 file, find the best match in the 1880 file using the method described in the "Block" matching strategy skill.
+	- For each person in the 1870 file, find the best match in the 1880 file using the method described in the "Block" matching strategy skill.
 	Add 3 tabs, one for each tier of the matching strategy.
 	Here are the thresholds for each tier {
 		Tier 1 only includes matches that have a score above 89.
 		Tier 2 only includes matches that have a score between 70 and 89.
 		Tier 3 only includes matches that have a score below 69.
 		}
-	List all the matches within the tier's thresholds in the appropriate tab
+	-List all the matches within the tier's thresholds in the appropriate tab
 	Limit those included in the preview tabs to the thresholds set.
 	Show waiting icon while rendering preview.
 	}
 Show all of the matched pairs along with criteria at bottom of matched pair on which the were matched and their scores.
 
+Census Context Panel {
+	- The context-panel is split into two scrollable sections, one for the 1870 census and one for the 1880 census.
+	- Pin the context-panel to the bottom of the screen.
+	- Center context-panel to screen horizontally.
+	- The context-panel fills the screen horizontally with 32 pixel margins.
+	- Each section of the context-panel can display only 3 rows at a time.
+	-When a match result is clicked {	
+		- The line number of the 1870 match result is passed to the showContext function.
+		- Fill the top section of the context-panel with rows extracted from the 1870 census, 12 whose line numbers are above the current line number clicked, and 12 below. Do not show the field names. Just show the data.
+		Scroll each census window down 50% when filled
+		- The line number of the 1880 match result is passed to the showContext function.
+		-Fill the bottom section of the context-panel with rows from the 1880 census in the same way as the 1870 census.
+		}
+	}
+
 Add a button to save a csv file with the matched pairs to a new file called "matched.csv".
 Each row in the matched.csv file should have the following columns {
-	match_s	core - The match score from the 1880 file.
+	match_score - The match score from the 1880 file.
 	line_1870 - The line number from the 1870 file.
 	All of the columns from the 1870 file.
 	line_1880 - The line number from the 1880 file.
 	All of the columns from the 1880 file.
 	match_evidence - The match evidence from the 1880 file.
 	}
-Show detailed steps of progress when matching in console. 
+Show detailed steps of progress when matching in browser console only. 
 Use a light UI theme.
 Run on port 5500

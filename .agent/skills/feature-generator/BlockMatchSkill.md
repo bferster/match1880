@@ -17,43 +17,49 @@ Create three blocking strategies to reduce comparison space:
 **Block 2:** norm_first_name + birth_date_10 + gender + race  
 - Catches people whose last name changed (marriage, adoption, transcription errors)
 
-**Block 3:** last_name+ gender + race + birth_place
+**Block 3:** last_name + gender + race + birth_place
 - Catches first name variations (nicknames) with distinctive birthplaces
 
 ### PHASE 2: SCORING (Calculate Match Quality)
 For each candidate pair, calculate a weighted score:
 
-**High-Value Exact Matches:**
-- last_name exact: +15 points
-- first_name exact: +15 points
-- middle_name exact: +8 points
-- birth_year exact: +10 points
-- age difference 9-11 years: +10 points
-- age difference 8-12 years: +6 points
-- gender exact: +10 points
-- race exact: +8 points
-- birth_place exact: +12 points
+**Name match** 
+	If full_name is identical in both datasets then add 100 points
+	else if last_name is identical in both datasets and first_name is identical in both datasets {
+		If there is no middle_name in both datasets then add 100 points
+		else then add 80 points
+		}
+	else if last_name is identical in both datasets and norm_name is identical in both datasets then add 70 points
+	else if last_name is identical in both datasets then add 50 points
+	else if nysiis_last_name is Identical in both datasets and norm_first_name is identical in both datasets then add 50 points
 
-**Finding Aid Matches:**
-- nysiis_last_name match: +10 points
-- nysiis_first_name match: +10 points
-- norm_first_name match: +8 points
-- birth_date_10 match: +7 points
-- norm_occupation match: +5 points
+**Birth Year Matches:**
+- if birth_year i identical in both datasets then add 50 points
+- else if birth_year +/-2 match in both datasets then add 33 points
+- else if birth_year +/-5 match in both datasets then add 20 points
 
-**Fuzzy Matches:**
-- last_name Jaro-Winkler ≥0.85: +8 points
-- first_name Jaro-Winkler ≥0.85: +8 points
-- birth_year within ±2 years: +7 points
-- birth_year within ±5 years: +4 points
-- race B/M equivalence: +6 points
+**Occupation Matches:**
+- if norm_occupation match in both datasets then add 10 points
+
+**Race Match:**
+- if race is identical in both datasets then add 10 points
+- else if race is B or M in both datasets then add 10 points
+
+**Occupation Match:**
+- if norm_occupation match in both datasets then add 10 points
 
 **Penalties (Red Flags):**
 - gender mismatch: -50 points
 - age regression (1880 birth_year < 1870 birth_year): -30 points
 - contradictory birth_place: -15 points
 
-### PHASE 4: HOUSEHOLD CONTEXT BOOSTING
+### PHASE 4: CONFLICT RESOLUTION
+Handle one-to-many scenarios:
+- If multiple 1880 records match same 1870 record: keep highest score, flag others
+- If multiple 1870 records match same 1880 record: keep highest score, flag others
+- One person can match at most ONE person in the other census
+
+### PHASE 5: HOUSEHOLD CONTEXT BOOSTING
 Use high-confidence (Tier 1) matches as "anchors" to help match their household members:
 
 1. For each Tier 1 match, identify their household in both censuses:
@@ -73,12 +79,11 @@ Use high-confidence (Tier 1) matches as "anchors" to help match their household 
    - "Son"/"Daughter" = children
    - Other relations: Brother, Sister, Father, Mother, Uncle, Aunt, Nephew, Niece, etc.
 
-### PHASE 5: CONFLICT RESOLUTION
-Handle one-to-many scenarios:
-- If multiple 1880 records match same 1870 record: keep highest score, flag others
-- If multiple 1870 records match same 1880 record: keep highest score, flag others
-- One person can match at most ONE person in the other census
 
-
+<!--
+**Fuzzy Matches:**
+- last_name Jaro-Winkler ≥0.85: +8 points
+- first_name Jaro-Winkler ≥0.85: +8 points
+-->
 
 
