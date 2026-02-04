@@ -118,12 +118,12 @@ function calculateScore(r1870, r1880) {
 	// --- PHASE 2: SCORING ---
 
 	// Penalties (Red Flags) - MATCHING SKILL
-	if (s.gen70 !== s.gen80) { score -= 50; details.push("Gender mismatch"); }
+	if (s.gen70 !== s.gen80) { score -= 500; details.push("Gender mismatch"); }
 	// Birth year regression (1880 birth_year < 1870 birth_year): -30 points
 	if (s.by80 < s.by70) { score -= 30; details.push("Birth year regression"); }
 
 	if (s.bpl70 && s.bpl80 && s.bpl70 !== 'VA' && s.bpl80 !== 'VA' && s.bpl70 !== s.bpl80) {
-		score -= 15; details.push("Contradictory birth place");
+		score -= 50; details.push("Contradictory birth place");
 	}
 
 	// Name Match Logic (Already implemented above - no change needed there)
@@ -188,6 +188,8 @@ const App = {
 	map1870: new Map(),
 	map1880: new Map(),
 
+	nextEgoId: 1, // Default start if no file loaded
+
 	blocks: new Map(),
 	candidates: [],
 
@@ -195,7 +197,12 @@ const App = {
 	tier1: [],
 	tier2: [],
 	tier3: [],
+	tier2: [],
+	tier3: [],
 	currentTab: 1,
+
+	searchIndex: -1,
+	searchTerm: '',
 
 	log: function (msg) {
 		// Console only log as requested
@@ -220,11 +227,23 @@ const App = {
 
 		Promise.all([
 			this.fetchCSV('ALB_CN_1870.csv'),
-			this.fetchCSV('ALB_CN_1880.csv') // Note: Using 1870 file for 1880 per prompt instruction in previous turns? 
-			// Wait, previous file content showed ALB_CN_1880.csv. I will stick to that.
+			this.fetchCSV('ALB_CN_1880.csv'),
+			this.fetchCSV('ALB_VER.csv')
 		]).then(results => {
 			this.data1870 = results[0];
 			this.data1880 = results[1];
+			const verData = results[2];
+
+			// Calculate nextEgoId
+			let maxId = 0;
+			if (verData && verData.length > 0) {
+				verData.forEach(row => {
+					const id = parseInt(row.egoid);
+					if (!isNaN(id) && id > maxId) maxId = id;
+				});
+			}
+			this.nextEgoId = maxId + 1;
+			this.log(`Loaded Verified Data. Next Ego ID: ${this.nextEgoId}`);
 
 			// Build Index Maps
 			// Ensure line is string for consistency as CSV parsing might vary
@@ -258,6 +277,11 @@ const App = {
 		$('.tab-btn').on('click', (e) => {
 			const t = $(e.currentTarget).data('tab');
 			this.switchTab(t);
+		});
+
+		$('#btn-search').on('click', () => this.findNext());
+		$('#inp-search').on('keypress', (e) => {
+			if (e.which === 13) this.findNext();
 		});
 
 
@@ -414,7 +438,13 @@ const App = {
 		}
 
 		this.log(`Phase 4 Resolved: ${this.tier1.length} Tier 1 anchors identified.`);
-		setTimeout(() => this.startHouseholdBoosting(), 100);
+
+		if ($('#chk-boost').is(':checked')) {
+			setTimeout(() => this.startHouseholdBoosting(), 100);
+		} else {
+			this.log("Skipping Household Context Boosting (User opt-out).");
+			setTimeout(() => this.finalizeResults(), 100);
+		}
 	},
 
 	startHouseholdBoosting: function () {
@@ -709,32 +739,30 @@ const App = {
 	},
 
 	exportCSV: function () {
-		this.log("Exporting CSV...");
-		// Combine all tiers
-		const allMatches = [...this.tier1, ...this.tier2, ...this.tier3];
+		this.log("Exporting Changes CSV...");
 
-		const data = allMatches.map(m => {
-			const row = {
-				match_score: m.score,
-				line_1870: m.r70.line,
-				...this.prefixKeys(m.r70, '1870_'),
-				line_1880: m.r80.line,
-				...this.prefixKeys(m.r80, '1880_'),
-				match_evidence: m.details
-			};
-			return row;
+		const changes = [];
+		// Only Tier 1 for changes as per request
+		this.tier1.forEach(m => {
+			changes.push({
+				theLine: m.r70.line,
+				theChange: this.nextEgoId
+			});
+			this.nextEgoId++;
 		});
 
-		const csv = Papa.unparse(data);
+		const csv = Papa.unparse(changes);
 		const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
 		const link = document.createElement("a");
 		const url = URL.createObjectURL(blob);
 		link.setAttribute("href", url);
-		link.setAttribute("download", "matched.csv");
+		link.setAttribute("download", "changes.csv");
 		link.style.visibility = 'hidden';
 		document.body.appendChild(link);
 		link.click();
 		document.body.removeChild(link);
+
+		this.log(`Exported ${changes.length} changes. Next EgoID is now ${this.nextEgoId}`);
 	},
 
 	prefixKeys: function (obj, prefix) {
@@ -743,6 +771,73 @@ const App = {
 			newObj[`${prefix}${k}`] = obj[k];
 		}
 		return newObj;
+	},
+
+	findNext: function () {
+		const term = $('#inp-search').val().trim().toLowerCase();
+		if (!term) return;
+
+		// New term reset
+		if (term !== this.searchTerm) {
+			this.searchTerm = term;
+			this.searchIndex = -1;
+		}
+
+		const $items = $('#matches-list .match-item');
+		if ($items.length === 0) return;
+
+		let found = false;
+		let start = this.searchIndex + 1;
+
+		// If start exceeds, wrap around for "next match" logic if desired, 
+		// but standard Find Next usually stops or asks to wrap. 
+		// Prompt says: "Start searching from the top. Clicking again finds the next match."
+		// Implies: First search starts from top. Valid. Next click finds NEXT.
+		// If we are at the end, what then?
+		// I will wrap around silently or just stop. 
+		// Let's stop and reset if at end so next click allows starting over?
+		// OR wrap immediately.
+		if (start >= $items.length) {
+			if (confirm("End of list reached. Continue from top?")) {
+				start = 0;
+			} else {
+				return;
+			}
+		}
+
+		for (let i = start; i < $items.length; i++) {
+			const $el = $($items[i]);
+			// Search visible text content
+			const txt = $el.text().toLowerCase();
+			if (txt.includes(term)) {
+				this.searchIndex = i;
+				this.scrollToMatch($el);
+				found = true;
+				break;
+			}
+		}
+
+		if (!found) {
+			// If not found in remainder, try from top if we didn't start at 0
+			if (start > 0) {
+				if (confirm("Reached end. Continue from top?")) {
+					this.searchIndex = -1;
+					this.findNext(); // Recurse once
+					return;
+				}
+			} else {
+				alert("No matches found.");
+			}
+		}
+	},
+
+	scrollToMatch: function ($el) {
+		// Highlight
+		$('.match-item').removeClass('search-highlight');
+		$el.addClass('search-highlight');
+
+		// Scroll
+		$el[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
 	}
 };
 

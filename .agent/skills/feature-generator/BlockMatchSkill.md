@@ -34,9 +34,10 @@ For each candidate pair, calculate a weighted score:
 	else if nysiis_last_name is Identical in both datasets and norm_first_name is identical in both datasets then add 50 points
 
 **Birth Year Matches:**
-- if birth_year i identical in both datasets then add 50 points
+- if birth_year is identical in both datasets then add 50 points
 - else if birth_year +/-2 match in both datasets then add 33 points
 - else if birth_year +/-5 match in both datasets then add 20 points
+if the difference between birth_year in both datasets is greater than 20 years then subtract 100 points
 
 **Occupation Matches:**
 - if norm_occupation match in both datasets then add 10 points
@@ -49,9 +50,9 @@ For each candidate pair, calculate a weighted score:
 - if norm_occupation match in both datasets then add 10 points
 
 **Penalties (Red Flags):**
-- gender mismatch: -50 points
-- age regression (1880 birth_year < 1870 birth_year): -30 points
-- contradictory birth_place: -15 points
+- gender mismatch: -500 points
+- age regression (1880 birth_year < 1870 birth_year): -200 points
+- contradictory birth_place: -50 points
 
 ### PHASE 4: CONFLICT RESOLUTION
 Handle one-to-many scenarios:
@@ -69,7 +70,7 @@ Use high-confidence (Tier 1) matches as "anchors" to help match their household 
 2. For unmatched members of these households, add bonus points:
    - Head of household name match: +20 points
    - Spouse match (opposite gender, similar age): +20 points
-   - Child match (using 1880 relation field): +8 points per child
+   - Child match (using 1880 relation field): +10 points per child
    - Parent match: +15 points
    - Co-residence bonus: +15 points
 

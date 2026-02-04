@@ -53,7 +53,7 @@ The following columns represent information about the person in a row. Some colu
 9. birth_year - The year the person was born. May be inaccurate +/- 5 years.
 10. gender - The sex of the person. Can be F for female or M for male.
 11. race - The race of the person. Can be B for Black, W for White, M for Mulatto, C for Chinese, and I for Indian.
-12. relation - The relationship between the person and the head of household, whose relationship is labeled Self. This includes: Husband, Wife, Son, Cousin, Father, Mother, Niece, Nephew, Brother, Sister, Uncle, Aunt, Daughter, GDau (grand-daughter), GSon (grand-son), GNephew (grand-nephew),  Gniece (grand-niece), GGDau (great-grand-daughter), GGSon (great-grand-son), DauL (daughter in-law), SonL (son in-law), SisterL (sister in-law), BrotherL (brother-in-law), FatherL (father-in-law), MotherL (mother-in-law),SSon (step son), SDaun (step daughter), Smother (step-mother), Sfather (step-father), Hbrother (half-brother), Hsister (half-sister),Adopted, or Other.
+12. relation - The relationship between the person and the head of household, whose relationship is labeled Self.
 13. occupation - The work role of the person.
 14. birth_place - Where the person was born.
 15. mother_birth_place - Where the person’s mother was born.
@@ -68,6 +68,8 @@ Results are always in uppercase. NYSIIS is a soundex-like encoding algorithm, us
 * nysiis_last_name - NYSIIS encoded last-name
 * nysiis_first_name - NYSIIS encoded first-name
 * norm_occupation - Occupations clustered to 21 meta-categories.
+
+There is a third file called ALB_VER.csv which is a list of all the names in the 1870 census that were verified to be correct. The egoid the unique identifier for each person verified. Load this file as well. After it has been loaded set the variable name "nextEgoId" to the next egoid in the file.
 
 APP IMPLEMENTATION:
 
@@ -87,7 +89,8 @@ Add a button to start the matching process {
 	Limit those included in the preview tabs to the thresholds set.
 	Show waiting icon while rendering preview.
 	}
-Show all of the matched pairs along with criteria at bottom of matched pair on which the were matched and their scores.
+Show all of the matched pairs along with criteria at bottom of matched pair on which the were matched and their scores.`
+Add a checkbox on the right side of the line with the save button to tell the matching algorithm to implement household context boosting. If checked, the matching algorithm will implement household context boosting.
 
 Census Context Panel {
 	- The context-panel is split into two scrollable sections, one for the 1870 census and one for the 1880 census.
@@ -104,15 +107,24 @@ Census Context Panel {
 		}
 	}
 
-Add a button to save a csv file with the matched pairs to a new file called "matched.csv".
-Each row in the matched.csv file should have the following columns {
-	match_score - The match score from the 1880 file.
-	line_1870 - The line number from the 1870 file.
-	All of the columns from the 1870 file.
-	line_1880 - The line number from the 1880 file.
-	All of the columns from the 1880 file.
-	match_evidence - The match evidence from the 1880 file.
+	Add a button to save a csv file {
+		When clicked {
+			- for each result in the Tier 1 section of the matched pairs section {
+				- add a row to the changes list with the following values set: {
+					- theLine - The line number from the 1870 file.
+					- theChange - The current value in the variable nextEgoId.
+					}
+			- Increment the variable nextEgoId by 1.
+			}
+		}
+		- Use the @SaveChanges.md skill to save the changes.
 	}
+
+	Add search box at top of matched pairs section to scroll to found string in any pair: {
+		- Start searching from the top.  
+		- Clicking again finds the next match that fits the search term.
+		}
+
 Show detailed steps of progress when matching in browser console only. 
 Use a light UI theme.
 Run on port 5500

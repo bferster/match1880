@@ -311,3 +311,8 @@ h1 {
 	color: #334155;
 	line-height: 1.5;
 }
+
+.search-highlight {
+	border: 2px solid var(--primary);
+	background-color: #fff9c4 !important;
+}

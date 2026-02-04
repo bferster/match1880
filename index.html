@@ -79,9 +79,15 @@
 
 		<div class="card controls">
 			<p>Click below to match records using the Block strategy.</p>
-			<div class="btn-group">
-				<button id="btn-run" class="btn primary" disabled>Start Matching</button>
-				<button id="btn-save" class="btn success hidden">Save matched.csv</button>
+			<div style="display: flex; justify-content: space-between; align-items: center;">
+				<div class="btn-group">
+					<button id="btn-run" class="btn primary" disabled>Start Matching</button>
+					<button id="btn-save" class="btn success hidden">Save changes.csv</button>
+				</div>
+				<label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+					<input type="checkbox" id="chk-boost" checked>
+					<span style="font-size: 0.95rem;margin-right:16px">Household boost?</span>
+				</label>
 			</div>
 
 			<div id="progress-container" class="hidden">
@@ -105,15 +111,20 @@
 		</div>
 
 		<div id="results-panel" class="card hidden">
-			<div class="results-header">
+			<div class="results-header" style="display: flex; justify-content: space-between; align-items: center;">
 				<h3>Matched Pairs</h3>
+				<div class="search-box" style="display: flex; gap: 8px;">
+					<input type="text" id="inp-search" placeholder="Search..."
+						style="padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+					<button id="btn-search" class="btn primary"
+						style="padding: 6px 12px;margin-right:16px">Find</button>
+				</div>
 			</div>
 
 			<div class="tabs">
-				<button class="tab-btn active" data-tab="1">Tier 1 (>90) <span id="cnt-1"
-						class="tab-badge">0</span></button>
-				<button class="tab-btn" data-tab="2">Tier 2 (>80) <span id="cnt-2" class="tab-badge">0</span></button>
-				<button class="tab-btn" data-tab="3">Tier 3 (>50) <span id="cnt-3" class="tab-badge">0</span></button>
+				<button class="tab-btn active" data-tab="1">Tier 1 <span id="cnt-1" class="tab-badge">0</span></button>
+				<button class="tab-btn" data-tab="2">Tier 2 <span id="cnt-2" class="tab-badge">0</span></button>
+				<button class="tab-btn" data-tab="3">Tier 3 <span id="cnt-3" class="tab-badge">0</span></button>
 			</div>
 
 
