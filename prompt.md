@@ -81,10 +81,10 @@ Add a button to start the matching process {
 	- For each person in the 1870 file, find the best match in the 1880 file using the method described in the "Block" matching strategy skill.
 	Add 3 tabs, one for each tier of the matching strategy.
 	Here are the thresholds for each tier {
-		Tier 1 only includes matches that have a score above 89.
-		Tier 2 only includes matches that have a score between 70 and 89.
-		Tier 3 only includes matches that have a score below 69.
-		}
+		- Tier 1 only includes matches that have a score above 90.
+		- Tier 2 only includes matches that have a score between 80 and 89.
+		- Tier 3 only includes matches that have a score between 70 and 79.
+	}
 	-List all the matches within the tier's thresholds in the appropriate tab
 	Limit those included in the preview tabs to the thresholds set.
 	Show waiting icon while rendering preview.
@@ -100,11 +100,12 @@ Census Context Panel {
 	- Each section of the context-panel can display only 3 rows at a time.
 	-When a match result is clicked {	
 		- The line number of the 1870 match result is passed to the showContext function.
-		- Fill the top section of the context-panel with rows extracted from the 1870 census, 12 whose line numbers are above the current line number clicked, and 12 below. Do not show the field names. Just show the data.
-		Scroll each census window down 50% when filled
+		- Fill the top section of the context-panel with rows extracted from the 1870 census, 12 whose line numbers are above the current line number clicked and 12 below. Do not show the field names. 
+		- Just show the data.
+		- Scroll each census window down 50% when filled
 		- The line number of the 1880 match result is passed to the showContext function.
-		-Fill the bottom section of the context-panel with rows from the 1880 census in the same way as the 1870 census.
-		}
+		- Fill the bottom section of the context-panel with rows from the 1880 census in the same way as the 1870 census.
+		- Scroll match results to top.	
 	}
 
 	Add a button to save a csv file {
@@ -121,8 +122,10 @@ Census Context Panel {
 	}
 
 	Add search box at top of matched pairs section to scroll to found string in any pair: {
-		- Start searching from the top.  
+		- Start searching from the top. 
+		- Ignore case. 
 		- Clicking again finds the next match that fits the search term.
+		- Find should find any occurance of search string in full match result.
 		}
 
 Show detailed steps of progress when matching in browser console only. 

@@ -374,13 +374,13 @@ const App = {
 							if (candidateMap.has(pairId)) continue;
 
 							const res = calculateScore(r70, r80);
-							// Min threshold 50 as per Tier 3
-							if (res.score >= 50) {
+							// Min threshold 60 as per Tier 3
+							if (res.score >= 60) {
 								// Assign Tier
-								let tier = 3;
-								if (res.score >= 90) tier = 1;
-								else if (res.score >= 80) tier = 2;
-								else tier = 3; // >= 50
+								let tier = 0;
+								if (res.score > 90) tier = 1;
+								else if (res.score >= 80) tier = 2; // 80-90
+								else tier = 3; // 60-79
 
 								if (tier > 0) {
 									candidateMap.set(pairId, {
@@ -542,10 +542,10 @@ const App = {
 						candidate.details += (candidate.details ? ", " : "") + reasons.join(", ");
 
 						// Re-Tier
-						let newTier = 3;
-						if (candidate.score >= 90) newTier = 1;
+						let newTier = 0;
+						if (candidate.score > 90) newTier = 1;
 						else if (candidate.score >= 80) newTier = 2;
-						else if (candidate.score >= 50) newTier = 3;
+						else if (candidate.score >= 60) newTier = 3;
 						else newTier = 0;
 
 						if (newTier > 0) {
@@ -591,7 +591,7 @@ const App = {
 
 			if (cand.tier === 1) this.tier1.push(cand);
 			else if (cand.tier === 2) this.tier2.push(cand);
-			else this.tier3.push(cand);
+			else if (cand.tier === 3) this.tier3.push(cand);
 			count++;
 		}
 
@@ -645,8 +645,8 @@ const App = {
 				let html = '';
 				data.forEach(m => {
 					let cls = 'score-low';
-					if (m.score >= 90) cls = 'score-high';
-					else if (m.score >= 70) cls = 'score-med';
+					if (m.score > 90) cls = 'score-high';
+					else if (m.score >= 80) cls = 'score-med';
 
 					const detailsHtml = (m.details || '').split(', ').map(d => `<span class="ev-tag">${d}</span>`).join('');
 
@@ -681,6 +681,7 @@ const App = {
 			// Hide spinner, show list
 			$spinner.addClass('hidden');
 			$list.removeClass('hidden');
+			$list.scrollTop(0);
 		}, 50);
 	},
 
@@ -783,21 +784,17 @@ const App = {
 			this.searchIndex = -1;
 		}
 
-		const $items = $('#matches-list .match-item');
-		if ($items.length === 0) return;
+		let data = [];
+		if (this.currentTab === 1) data = this.tier1;
+		else if (this.currentTab === 2) data = this.tier2;
+		else data = this.tier3;
+
+		if (data.length === 0) return;
 
 		let found = false;
 		let start = this.searchIndex + 1;
 
-		// If start exceeds, wrap around for "next match" logic if desired, 
-		// but standard Find Next usually stops or asks to wrap. 
-		// Prompt says: "Start searching from the top. Clicking again finds the next match."
-		// Implies: First search starts from top. Valid. Next click finds NEXT.
-		// If we are at the end, what then?
-		// I will wrap around silently or just stop. 
-		// Let's stop and reset if at end so next click allows starting over?
-		// OR wrap immediately.
-		if (start >= $items.length) {
+		if (start >= data.length) {
 			if (confirm("End of list reached. Continue from top?")) {
 				start = 0;
 			} else {
@@ -805,12 +802,15 @@ const App = {
 			}
 		}
 
-		for (let i = start; i < $items.length; i++) {
-			const $el = $($items[i]);
-			// Search visible text content
-			const txt = $el.text().toLowerCase();
-			if (txt.includes(term)) {
+		for (let i = start; i < data.length; i++) {
+			const item = data[i];
+			// Search in full match result (data object)
+			// usage of JSON.stringify to catch all field values
+			const content = JSON.stringify(item).toLowerCase();
+
+			if (content.includes(term)) {
 				this.searchIndex = i;
+				const $el = $('#matches-list .match-item').eq(i);
 				this.scrollToMatch($el);
 				found = true;
 				break;
@@ -818,11 +818,10 @@ const App = {
 		}
 
 		if (!found) {
-			// If not found in remainder, try from top if we didn't start at 0
 			if (start > 0) {
 				if (confirm("Reached end. Continue from top?")) {
 					this.searchIndex = -1;
-					this.findNext(); // Recurse once
+					this.findNext();
 					return;
 				}
 			} else {
