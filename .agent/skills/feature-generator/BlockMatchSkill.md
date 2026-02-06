@@ -32,7 +32,8 @@ For each candidate pair, calculate a weighted score:
 	else if last_name is identical in both datasets and norm_name is identical in both datasets then +70 points
 	else if last_name is identical AND first_name Jaro-Winkler > 0.8 then +60 points
 	else if last_name is Identical in both datasets and the first initial of first_name is identical in both datasets then +40 points
-	else if first_name Jaro-Winkler score is ≥0.85 then +20 points
+	
+	- if first_name Jaro-Winkler score is ≥0.85 then add +20 points
 
 **Birth Year Matches:**
 	- if birth_year is identical in both datasets then +50 points
@@ -44,8 +45,9 @@ For each candidate pair, calculate a weighted score:
 
 **Race Match:**
 	- if race is identical in both datasets then +10 points
-	- else if race is B or M in both datasets then +10 points
-
+	- else if race is W both datasets then +10 points
+	- else if race does not equal W in both datasets then +10 points
+	
 **Occupation Match:**
 	- if norm_occupation match in both datasets then +10 points
 
@@ -79,16 +81,16 @@ For each candidate pair, calculate a weighted score:
 
 		2. For unmatched members of these households, add bonus points:
 		- Head of household name match: +20 points
-		- Spouse match (opposite gender, similar age): +20 points
+		- Spouse match (opposite gender, similar age): +10 points
 		- Child match (using 1880 relation field): +10 points per child, only if they are older than 10 years old
-		- Parent match: +15 points
-		- Co-residence bonus: +15 points
+		- Parent match: +10 points
+		- Co-residence bonus: +5 points
 
 		3. Use 1880 relation field to validate family structure:
 		- "Self" = head of household
 		- "Wife" = spouse
 		- "Son"/"Daughter" = children
-		- Other relations: Brother, Sister, Father, Mother, Uncle, Aunt, Nephew, Niece, etc.
+		- Other relations: Brother, Sister, Father, Mother, Uncle, Aunt, Nephew, Niece, Mother-in-Law, Father-in-Law etc.
 
 
 

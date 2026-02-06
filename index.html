@@ -80,9 +80,14 @@
 		<div class="card controls">
 			<p>Click below to match records using the Block strategy.</p>
 			<div style="display: flex; justify-content: space-between; align-items: center;">
-				<div class="btn-group">
-					<button id="btn-run" class="btn primary" disabled>Start Matching</button>
-					<button id="btn-save" class="btn success hidden">Save changes.csv</button>
+				<div class="btn-group" style="display:flex; align-items:center;">
+					<select id="sel-mode"
+						style="padding: 8px; margin-right: 8px; border-radius: 4px; border: 1px solid #ccc;">
+						<option value="match">Match 1870 to 1880</option>
+						<option value="dedup">Find 1870 Duplicates</option>
+					</select>
+					<button id="btn-run" class="btn primary" disabled>Start</button>
+					<button id="btn-save" class="btn success hidden" style="margin-left:8px">Save changes.csv</button>
 				</div>
 				<label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
 					<input type="checkbox" id="chk-boost" checked>
@@ -101,11 +106,11 @@
 
 		<div id="context-panel" class="card hidden">
 			<div class="context-group">
-				<h4>1870 Census Context (±12 Rows)</h4>
+				<h4 id="ctx-head-top">1870 Census Context (±12 Rows)</h4>
 				<div id="context-1870" class="context-box">Click a match to view context</div>
 			</div>
 			<div class="context-group">
-				<h4>1880 Census Context (±12 Rows)</h4>
+				<h4 id="ctx-head-btm">1880 Census Context (±12 Rows)</h4>
 				<div id="context-1880" class="context-box">Click a match to view context</div>
 			</div>
 		</div>

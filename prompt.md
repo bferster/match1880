@@ -99,12 +99,12 @@ Census Context Panel {
 	- The context-panel fills the screen horizontally with 32 pixel margins.
 	- Each section of the context-panel can display only 3 rows at a time.
 	-When a match result is clicked {	
-		- The line number of the 1870 match result is passed to the showContext function.
-		- Fill the top section of the context-panel with rows extracted from the 1870 census, 12 whose line numbers are above the current line number clicked and 12 below. Do not show the field names. 
+		- The line number of the the result is passed to the showContext function.
+		- Fill the top section of the context-panel with rows extracted from the first dataset, 12 whose line numbers are above the current line number clicked and 12 below. Do not show the field names. 
 		- Just show the data.
 		- Scroll each census window down 50% when filled
-		- The line number of the 1880 match result is passed to the showContext function.
-		- Fill the bottom section of the context-panel with rows from the 1880 census in the same way as the 1870 census.
+		- The line number of the matched result is passed to the showContext function.
+		- Fill the bottom section of the context-panel with rows from the second dataset in the same way as the first dataset.
 		- Scroll match results to top.	
 	}
 
@@ -128,6 +128,18 @@ Census Context Panel {
 		- Find should find any occurance of search string in full match result.
 		}
 
+	Add a pulldwown menu with the following options: {
+		- "Match 1870 to 1880"
+		- "Find 1870 Duplicates"
+		}	
+	- If "Match 1870 to 1880" is selected {
+		- follow the skill at @Block-matching-strategy.md
+		}
+	- If "Find 1870 Duplicates" is selected {
+		- follow the skill at @Find-Duplicates-Skill.md using @ALBN_1870.csv as the dataset.
+		- The line number of the result is passed to the top showContext function.
+		- The line number of the match result is passed to the bottom showContext function.
+		}
 Show detailed steps of progress when matching in browser console only. 
 Use a light UI theme.
 Run on port 5500
