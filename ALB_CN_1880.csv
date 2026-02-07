@@ -1,4 +1,4 @@
-line,family,full_name,first_name,middle_name,last-_name,age,birth_year,gender,race,marital,relation,occupation,birth_place,father_birth-place,mother_birth-place,birth_year_10,norm_first_name,nysiis_last_name,norm_occupation
+line,family,full_name,first_name,middle_name,last_name,age,birth_year,gender,race,marital,relation,occupation,birth_place,father_birth-place,mother_birth-place,birth_year_10,norm_first_name,nysiis_last_name,norm_occupation
 1,1,Josoeph F Wood,Josoeph,F,Wood,48,1832,M,W,M,Self,Blacksmith,,MD,VA,1880,JOSEPH,WAD,METAL
 2,1,Martha A Wood,Martha,A,Wood,47,1833,F,W,M,Wife,Keeping House,VA,VA,,1830,MARTHA,WAD,DOMESTIC
 3,1,William J Wood,William,J,Wood,19,1861,M,W,S,Son,Blacksmith,VA,VA,,1860,WILLIAM,WAD,METAL

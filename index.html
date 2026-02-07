@@ -4,7 +4,8 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Census Matcher 1880</title>
+	<title>Verité Census Explorer</title>
+	<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
 	<link rel="stylesheet" href="style.css">
 	<style>
 		/* Add specific styles for this layout if not in style.css */
@@ -70,21 +71,26 @@
 
 	<div class="app-container">
 		<header>
-			<h1>Census Matcher 1870-1880</h1>
+			<h1>Verité Census Explorer</h1>
 			<div class="status-panel">
-				<span id="st-1870" class="badge">Waiting for 1870...</span>
-				<span id="st-1880" class="badge">Waiting for 1880...</span>
+				<span style="font-family: sans-serif;font-size: .8em;">Click to change datasets 🡒 </span>
+				<span id="st-1870" class="badge" style="cursor:pointer" title="Click to load CSV">Waiting for
+					1870...</span>
+				<span id="st-1880" class="badge" style="cursor:pointer" title="Click to load CSV">Waiting for
+					1880...</span>
+				<input type="file" id="file-1870" accept=".csv" style="display:none">
+				<input type="file" id="file-1880" accept=".csv" style="display:none">
 			</div>
 		</header>
 
 		<div class="card controls">
-			<p>Click below to match records using the Block strategy.</p>
+			<p>Select a method to match records:</p>
 			<div style="display: flex; justify-content: space-between; align-items: center;">
 				<div class="btn-group" style="display:flex; align-items:center;">
 					<select id="sel-mode"
 						style="padding: 8px; margin-right: 8px; border-radius: 4px; border: 1px solid #ccc;">
-						<option value="match">Match 1870 to 1880</option>
-						<option value="dedup">Find 1870 Duplicates</option>
+						<option value="match">Match Datasets</option>
+						<option value="dedup">Find Duplicates</option>
 					</select>
 					<button id="btn-run" class="btn primary" disabled>Start</button>
 					<button id="btn-save" class="btn success hidden" style="margin-left:8px">Save changes.csv</button>

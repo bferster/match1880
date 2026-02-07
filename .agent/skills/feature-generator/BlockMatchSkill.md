@@ -30,10 +30,7 @@ For each candidate pair, calculate a weighted score:
 		else then +80 points
 		}
 	else if last_name is identical in both datasets and norm_name is identical in both datasets then +70 points
-	else if last_name is identical AND first_name Jaro-Winkler > 0.8 then +60 points
-	else if last_name is Identical in both datasets and the first initial of first_name is identical in both datasets then +40 points
-	
-	- if first_name Jaro-Winkler score is ≥0.85 then add +20 points
+	else if last_name is identical AND first_name Jaro-Winkler > 0.85 then +60 points
 
 **Birth Year Matches:**
 	- if birth_year is identical in both datasets then +50 points

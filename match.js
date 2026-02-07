@@ -1,6 +1,4 @@
-///////////////////////////////////////////////////////////////////////////////
-// LOGIC: MATCHING STRATEGY (Ported from Block Matching Skill)
-///////////////////////////////////////////////////////////////////////////////
+
 
 export function jaroWinkler(s1, s2)                                            // CALCULATE STRING DISTANCE
 {
@@ -74,8 +72,7 @@ export function getBlockKeys(record)                                    // GENER
 
 	const nysiis_last = (record.nysiis_last_name || '').toUpperCase();
 	const norm_first = (record.norm_first_name || '').toUpperCase();
-	// Handle typo from 1880 file if present
-	const last_name = (record.last_name || record.last_name_ || record['last-_name'] || '').toUpperCase();
+	const last_name = (record.last_name || '').toUpperCase();
 	const birth_year = record.birth_year_10 || record.birth_year;
 	const birth_place = (record.birth_place || '').toUpperCase().substring(0, 2);
 
@@ -88,128 +85,78 @@ export function getBlockKeys(record)                                    // GENER
 	if (last_name && birth_place) {
 		keys.push(`B3:${last_name}|${gender}|${race}|${birth_place}`);  // Block 3
 	}
-
 	return keys;
 }
 
-export function calculateScore(r1870, r1880, mode = 'match')                          // SCORE CANDIDATE PAIR
+export function calculateScore(set1, set2, mode = 'match')                          // SCORE CANDIDATE PAIR
 {
-	let score = 0;
-	const details = [];
+	let score = 0;                                                                       // Init score
+	const details = [];                                                                  // Init details
+	const get = (r, f) => (r[f] || '').toUpperCase();                                    // Helper: Get value as non-null U/C
+	const val = (r, f) => parseInt(r[f]) || 0;                                           // Helper: Get value as non-null int
 
-	// Helper to safety get fields
-	const get = (r, f) => (r[f] || '').toUpperCase();
-	const val = (r, f) => parseInt(r[f]) || 0;
-
-	const s = {
-		last70: get(r1870, 'last_name'),
-		last80: get(r1880, 'last_name') || get(r1880, 'last-_name'),
-		first70: get(r1870, 'first_name'), first80: get(r1880, 'first_name'),
-		mid70: get(r1870, 'middle_name'), mid80: get(r1880, 'middle_name'),
-		age70: val(r1870, 'age'), age80: val(r1880, 'age'),
-		by70: val(r1870, 'birth_year'), by80: val(r1880, 'birth_year'),
-		gen70: get(r1870, 'gender'), gen80: get(r1880, 'gender'),
-		race70: get(r1870, 'race'), race80: get(r1880, 'race'),
-		bpl70: get(r1870, 'birth_place'), bpl80: get(r1880, 'birth_place'),
-		ny_last70: get(r1870, 'nysiis_last_name'), ny_last80: get(r1880, 'nysiis_last_name'),
-		ny_first70: get(r1870, 'nysiis_first_name') || get(r1870, 'norm_first_name'), // Fallback if nysiis_first missing
-		ny_first80: get(r1880, 'nysiis_first_name') || get(r1880, 'norm_first_name'),
-		norm_occ70: get(r1870, 'norm_occupation'), norm_occ80: get(r1880, 'norm_occupation'),
+	const s = {                                                                          // Normalize data
+		full1: get(set1, 'full_name'), full2: get(set2, 'full_name'),               	 // Full Names
+		last1: get(set1, 'last_name'), last2: get(set2, 'last_name'),                    // Last Names
+		first1: get(set1, 'first_name'), first2: get(set2, 'first_name'),                // First Names
+		mid1: get(set1, 'middle_name'), mid2: get(set2, 'middle_name'),                  // Middle Names
+		by1: val(set1, 'birth_year'), by2: val(set2, 'birth_year'),                      // Birth Years
+		gen1: get(set1, 'gender'), gen2: get(set2, 'gender'),                            // Genders
+		race1: get(set1, 'race'), race2: get(set2, 'race'),                              // Races
+		bpl1: get(set1, 'birth_place'), bpl2: get(set2, 'birth_place'),                  // Birth Places
+		ny_last1: get(set1, 'nysiis_last_name'), ny_last2: get(set2, 'nysiis_last_name'), // NYSIIS Last
+		ny_first1: get(set1, 'nysiis_first_name') || get(set1, 'norm_first_name'),        // NYSIIS First 70
+		ny_first2: get(set2, 'nysiis_first_name') || get(set2, 'norm_first_name'),        // NYSIIS First 80
+		norm_occ1: get(set1, 'norm_occupation'), norm_occ2: get(set2, 'norm_occupation'), // Occupations
 	};
+	const jwFirst = jaroWinkler(s.first1, s.first2);                                     // Jaro First
+	const absDiff = Math.abs(s.by1 - s.by2);											 // Difference in birth year
 
-	/////////////////////////////////////////////////////////////////////////////////////////////////
-	// LOGIC BRANCHING
-	/////////////////////////////////////////////////////////////////////////////////////////////////
+	// PENALTIES
 
-	if (mode === 'match') {
-		// --- BLOCK MATCH SKILL LOGIC ---
-
-		// Penalties
-		if (s.gen70 !== s.gen80) { score -= 500; details.push("Gender mismatch"); }
-
-		const byDiff = s.by70 - s.by80; // 1870(older) - 1880(younger)? logic implies birth year.
-		// age regression: 1880 birth year < 1870 birth year. 
-		// i.e. Person born 1850 in 1870 record. In 1880 record, birth year is 1840. That's fine?
-		// "age regression (1880 birth_year < 1870 birth_year)" -> born EARLIER in 1880 than 1870?
-		// Usually 1880 record should have BY around 1870 BY. 
-		// If 1880 BY is SIGNIFICANTLY smaller, it means they got OLDER faster?
-		// Let's stick to simple diff logic from prompt: "1880 birth_year < 1870 birth_year"
-		if (s.by80 < s.by70) {
-			const diff = s.by70 - s.by80;
-			if (diff > 10) { score -= 100; details.push("Age regression > 10"); }
-			else if (diff > 5) { score -= 20; details.push("Age regression > 5"); }
-		}
-
-		if (s.bpl70 && s.bpl80 && s.bpl70 !== 'VA' && s.bpl80 !== 'VA' && s.bpl70 !== s.bpl80) {
-			score -= 50; details.push("Contradictory birth place");
-		}
-
-		if (s.ny_last70 && s.ny_last80 && s.ny_last70 !== s.ny_last80) {
-			score -= 100; details.push("NYSIIS Last mismatch");
-		}
-
-		// Note: nysiis_first might not be in dataset, if so skip penalty or use norm
-		if (s.ny_first70 && s.ny_first80 && s.ny_first70 !== s.ny_first80) {
-			score -= 40; details.push("NYSIIS First mismatch");
-		}
-
-		// Birth Year Bonus
-		const absDiff = Math.abs(s.by70 - s.by80);
-		if (s.by70 === s.by80 && s.by70) { score += 50; details.push("Exact birth year"); }
-		else if (absDiff <= 2) { score += 30; details.push("Birth year +/- 2"); }
-		else if (absDiff <= 5) { score += 5; details.push("Birth year +/- 5"); }
-
-	} else {
-		// --- FIND DUPLICATES SKILL LOGIC ---
-
-		// Birth Year Matches
-		if (s.by70 === s.by80 && s.by70) {
-			score += 50; details.push("Exact birth year");
-		} else if (Math.abs(s.by70 - s.by80) > 5) {
-			score -= 500; details.push("Birth year > 5 diff");
-		}
+	if (s.gen1 !== s.gen2) { score -= 500; details.push("Gender mismatch"); }          	// Gender
+	if ((s.by2 < s.by1) && (mode == "match")) {                                         // If first is older (impossible)
+		const diff = s.by1 - s.by2;                                                    	// Diff in age
+		if (diff > 10) { score -= 100; details.push("Age regression > 10"); }           // Major rewind
 	}
+	if (s.bpl1 && s.bpl2 && s.bpl1 !== 'VA' && s.bpl2 !== 'VA' && s.bpl1 !== s.bpl2) {  // Birth Place Check
+		score -= 50; details.push("Contradictory birth place");                         // Bad BPL
+	}
+	// BIRTH
 
+	if (s.by1 === s.by2 && s.by1) { score += 50; details.push("Exact birth year"); }  	// Exact BY
+	else if (absDiff <= 2) { score += 30; details.push("Birth year +/- 2"); }           // Close BY
+	else if (absDiff <= 5) { score += 5; details.push("Birth year +/- 5"); }            // Near BY
+	else if (absDiff >= 10) { score -= 200; details.push("Birth year > 10"); }           // Far
 
-	// --- COMMON / SHARED SCORING (NAME & RACE & OCC) ---
-	// (Unless specifically divergent, but Skills list same Name/Race/Occ logic mostly)
+	// NAMES
 
-	// Name Match Logic
-	const full70 = (s.first70 + ' ' + (s.mid70 ? s.mid70 + ' ' : '') + s.last70).trim();
-	const full80 = (s.first80 + ' ' + (s.mid80 ? s.mid80 + ' ' : '') + s.last80).trim();
-	const jwFirst = jaroWinkler(s.first70, s.first80);
-
-	if (full70 === full80 && full70.length > 0) {
-		score += 100; details.push("Full name identical");
-	} else if (s.last70 === s.last80 && s.first70 === s.first80 && s.last70) {
-		score += 80; details.push("Exact First/Last"); // Middle name logic effectively maps here
-	} else if (s.last70 === s.last80 && get(r1870, 'norm_first_name') === get(r1880, 'norm_first_name') && s.last70) {
-		score += 70; details.push("Exact Last + Norm First");
-	} else if (s.last70 === s.last80 && jwFirst > 0.8) {
+	if (s.full1 === s.full2 && s.full1.length > 0) {                                  	// Identical Full
+		score += 100; details.push("Exact Full");
+	}
+	else if (s.last1 === s.last2 && s.first1 === s.first2 && s.last1) {           		// Exact F/L
+		score += 80; details.push("Exact First/Last");
+	}
+	else if (s.last1 === s.last2 && get(set1, 'norm_first_name') === get(set2, 'norm_first_name') && s.last1) { // Last identical, first normalized										
+		score += 70; details.push("Exact Last + Norm First");                                  	// Norm First
+	}
+	else if (s.last1 === s.last2 && jwFirst > 0.85) {                                 	// Fuzzy First
 		score += 60; details.push("Exact Last + Fuzzy First");
-	} else if (s.last70 === s.last80 && s.first70 && s.first80 && s.first70[0] === s.first80[0]) {
-		score += 40; details.push("Exact Last + First Initial");
-	}
-	// NYSIIS Last + Norm First is in BlockMatch but NOT FindDuplicates. 
-	// To be safe, include only if match mode? Or assume helpful for both? 
-	// FindDuplicates text provided was explicit list. I will exclude for dedup if strict.
-	else if (mode === 'match' && s.ny_last70 === s.ny_last80 && get(r1870, 'norm_first_name') === get(r1880, 'norm_first_name') && s.ny_last70) {
-		score += 50; details.push("NYSIIS Last + Norm First");
 	}
 
-	if (mode === 'match' && jwFirst >= 0.85) { score += 20; details.push("Fuzzy First Bonus"); }
+	// RACE																				
 
-	// Race Match
-	// Identical (+10) OR Both W (+10) OR Both !W (+10)
-	// Effectively: If (RaceA == RaceB) OR (RaceA != W AND RaceB != W)
-	if ((s.race70 === s.race80 && s.race70)) {
+	if ((s.race1 === s.race2 && s.race1)) {                                          	// Race Exact
 		score += 10; details.push("Race Match");
-	} else if (s.race70 !== 'W' && s.race80 !== 'W' && s.race70 && s.race80) {
+	}
+	else if (s.race1 !== 'W' && s.race2 !== 'W' && s.race1 && s.race2) {           		// Race Non-White
 		score += 10; details.push("Non-White Match");
 	}
 
-	// Occupation Match
-	if (s.norm_occ70 === s.norm_occ80 && s.norm_occ70) { score += 10; details.push("Norm occupation"); }
+	// OCCUPATION
 
+	if (s.norm_occ1 === s.norm_occ2 && s.norm_occ1) {
+		score += 10; details.push("Norm occupation");
+	}
 	return { score, details: details.join(", ") };
 }

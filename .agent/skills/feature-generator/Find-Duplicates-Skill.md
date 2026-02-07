@@ -25,7 +25,7 @@ This skill Looks art records in a dataset and returns a list of duplicate rows.
 
 **Birth Year Matches:**
 	- if birth_year is identical in both datasets then +50 points
-	- else if birth_year are more than 5 in both datasets then -500nts
+	- if the birth_year in both datasets are more than 5 years apart then -500 points
 
 **Occupation Matches:**
 	- if norm_occupation match in both datasets then +10 points

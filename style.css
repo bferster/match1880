@@ -94,6 +94,13 @@ h1 {
 	background: var(--success-hover);
 }
 
+
+.household-context {
+	font-size: 0.7em;
+	color: var(--text-muted);
+	display: inline-block;
+}
+
 .hidden {
 	display: none;
 }

@@ -61,7 +61,8 @@ The following columns represent information about the person in a row. Some colu
 }
 
 I have these finding aides are additional columns added to primary source datasets that synthesize data from other columns to make matching easier. These fields are appended as columns in a primary source datasets where applicable.
-Results are always in uppercase. NYSIIS is a soundex-like encoding algorithm, used to roughly compare names. The dates are rounded +/- 5 years with this formula: floor((year+5)/10)*10.
+Results are always in uppercase. NYSIIS is a soundex-like encoding algorithm, used to roughly compare names. 
+
 * date_10 - year rounded down by +/- 5 years
 * birth_date_10 - rounded
 * norm_first_name - Abbreviation and nicknames expanded to full name
@@ -78,19 +79,26 @@ Use only plain vanilla javascript and jQuery to do this.
 Do not use node.js
 Load the files automatically on page load.
 Add a button to start the matching process {
-	- For each person in the 1870 file, find the best match in the 1880 file using the method described in the "Block" matching strategy skill.
+	- For each person in the first dataset, find the best match in the second dataset using the method described in @BlockMatchingStrategy.md.
 	Add 3 tabs, one for each tier of the matching strategy.
 	Here are the thresholds for each tier {
 		- Tier 1 only includes matches that have a score above 90.
 		- Tier 2 only includes matches that have a score between 80 and 89.
 		- Tier 3 only includes matches that have a score between 70 and 79.
-	}
+		}
 	-List all the matches within the tier's thresholds in the appropriate tab
-	Limit those included in the preview tabs to the thresholds set.
+	- Limit those included in the preview tabs to the thresholds set.
 	Show waiting icon while rendering preview.
 	}
-Show all of the matched pairs along with criteria at bottom of matched pair on which the were matched and their scores.`
-Add a checkbox on the right side of the line with the save button to tell the matching algorithm to implement household context boosting. If checked, the matching algorithm will implement household context boosting.
+	- Add a checkbox on the right side of the line with the save button to tell the matching algorithm to implement household context boosting. If checked, the matching algorithm will implement household context boosting.
+
+Matched Pairs Panel {
+	- for each matched pair {
+		- Show all of the matched pairs along with criteria at bottom of matched pair on which the were matched and their scores.
+		- Show full_names of all people in family of the matched pair.
+		}
+	}
+
 
 Census Context Panel {
 	- The context-panel is split into two scrollable sections, one for the 1870 census and one for the 1880 census.
@@ -106,16 +114,28 @@ Census Context Panel {
 		- The line number of the matched result is passed to the showContext function.
 		- Fill the bottom section of the context-panel with rows from the second dataset in the same way as the first dataset.
 		- Scroll match results to top.	
+		}
 	}
 
-	Add a button to save a csv file {
-		When clicked {
-			- for each result in the Tier 1 section of the matched pairs section {
-				- add a row to the changes list with the following values set: {
-					- theLine - The line number from the 1870 file.
-					- theChange - The current value in the variable nextEgoId.
+Add a button to save a csv file {
+	When clicked {
+		- if matching {
+					- for each result in the Tier 1, 2, or 3 section of the matched pairs section {
+						- add a row to the changes list with the following values set: {
+							- theLine - The line number from the 1870 file.
+							- theChange - The current value in the variable nextEgoId.
+							- theScore - The score of the match.
+							}
 					}
-			- Increment the variable nextEgoId by 1.
+			}
+			- else if finding duplicates {
+				- for each result in the Tier 1, 2, or 3 section of the matched pairs section {
+					- add a row to the changes list with the following values set: {
+						- theLine - The line number from the from the first dataset.
+						- theDupe - The line number from the second dataset.
+						- theScore - The score of the match.
+						}
+					}
 			}
 		}
 		- Use the @SaveChanges.md skill to save the changes.
@@ -139,7 +159,23 @@ Census Context Panel {
 		- follow the skill at @Find-Duplicates-Skill.md using @ALBN_1870.csv as the dataset.
 		- The line number of the result is passed to the top showContext function.
 		- The line number of the match result is passed to the bottom showContext function.
+		- Tier 1 only includes matches that have a score above 150.
+		- Tier 2 only includes matches that have a score between 140 and 149.
+		- Tier 3 only includes matches that have a score between 130 and 139.
 		}
+	if (st-1870 element is clicked) {
+		Show interface to load CSV file.
+		When CSV file is loaded put data in 1870 
+		}		
+	if (st-1880 element is clicked) {
+		Show interface to load CSV file.
+		When CSV file is loaded put data in 1880 
+		}		
+
+		
+
+
+		
 Show detailed steps of progress when matching in browser console only. 
 Use a light UI theme.
 Run on port 5500

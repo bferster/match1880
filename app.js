@@ -58,6 +58,7 @@ const App = {
 
 	init: function ()                                                              // INITIALIZE
 	{
+		app = this;
 		this.log("Application initialized on port 5500.");
 		this.log("Loading datasets in background...");
 
@@ -136,7 +137,14 @@ const App = {
 		});
 
 
+
 		// Delegation for match item clicks
+		$('#st-1870').on('click', () => $('#file-1870').trigger('click'));           // CLICK 1870
+		$('#st-1880').on('click', () => $('#file-1880').trigger('click'));           // CLICK 1880
+
+		$('#file-1870').on('change', (e) => this.loadLocalFile(e, 1870));            // LOAD 1870
+		$('#file-1880').on('change', (e) => this.loadLocalFile(e, 1880));            // LOAD 1880
+
 		$(document).on('click', '.match-item', (e) => {                              // HANDLER: MATCH CLICK
 			// Visual feedback
 			$('.match-item').removeClass('active-match');
@@ -155,6 +163,38 @@ const App = {
 			console.log(`[Context] 1880 Match Line: ${l80}`);
 
 			this.showContext(l70_shift, l80_shift);
+		});
+	},
+
+	loadLocalFile: function (e, year)                                              // LOAD LOCAL FILE
+	{
+		const file = e.target.files[0];
+		if (!file) return;
+
+		this.setStatus(`st-${year}`, "Parsing...", "score-med");
+
+		Papa.parse(file, {
+			header: true,
+			skipEmptyLines: true,
+			complete: (results) => {
+				const data = results.data;
+				if (year === 1870) {
+					this.data1870 = data;
+					this.map1870 = new Map();
+					this.data1870.forEach((r, i) => this.map1870.set(String(r.line), i));
+				} else {
+					this.data1880 = data;
+					this.map1880 = new Map();
+					this.data1880.forEach((r, i) => this.map1880.set(String(r.line), i));
+				}
+
+				this.setStatus(`st-${year}`, `Loaded (${data.length})`, 'ready');
+				this.log(`Loaded ${year} data from file: ${file.name} (${data.length} records)`);
+
+				// Reset existing search/results state if needed?
+				// For now, allow re-run.
+				$('#btn-run').prop('disabled', false);
+			}
 		});
 	},
 
@@ -250,19 +290,24 @@ const App = {
 							if (candidateMap.has(pairId)) continue;              // Skip duplicates
 
 							const res = calculateScore(r70, r80, this.mode);
-							// Min threshold 60 as per Tier 3
-							if (res.score >= 60) {
-								// Assign Tier
-								let tier = 0;
-								if (res.score > 90) tier = 1;                    // Tier 1
-								else if (res.score >= 80) tier = 2;              // Tier 2
-								else tier = 3;                                   // Tier 3
 
-								if (tier > 0) {
-									candidateMap.set(pairId, {
-										r70, r80, score: res.score, details: res.details, tier
-									});
-								}
+							let tier = 0;
+							if (this.mode === 'dedup') {
+								// Dedup Tiers: >150 (T1), 140-149 (T2), 130-139 (T3)
+								if (res.score > 150) tier = 1;
+								else if (res.score >= 140) tier = 2;
+								else if (res.score >= 130) tier = 3;
+							} else {
+								// Match Tiers: >90 (T1), 80-90 (T2), 60-79 (T3)
+								if (res.score > 90) tier = 1;
+								else if (res.score >= 80) tier = 2;
+								else if (res.score >= 60) tier = 3;
+							}
+
+							if (tier > 0) {
+								candidateMap.set(pairId, {
+									r70, r80, score: res.score, details: res.details, tier
+								});
 							}
 						}
 					}
@@ -527,6 +572,45 @@ const App = {
 	},
 
 
+	getHouseholdMembers: function (record, dataset)                                // GET HOUSEHOLD
+	{
+		const famKey = record.family_number || record.family || record.dwelling;
+		if (!famKey) return '(No Family ID)';
+
+		// This is O(N) per call which is slow for rendering list.
+		// Optimized: We access by line index if sorted, but dataset is just array.
+		// Ideally we pre-index families. But for now, let's filter.
+		// LIMITATION: Use map for speed if slow.
+
+		// Identify Map
+		let map = this.map1870;
+		if (dataset === this.data1880) map = this.map1880;
+
+		const trueIdx = map.get(String(record.line));
+		if (trueIdx === undefined) return '(Index Error)';
+
+		const members = [];
+
+		// Scan up
+		for (let i = trueIdx - 1; i >= 0; i--) {
+			const r = dataset[i];
+			const k = r.family_number || r.family || r.dwelling;
+			if (k !== famKey) break;
+			members.unshift(r.full_name);
+		}
+
+		// Scan down
+		for (let i = trueIdx + 1; i < dataset.length; i++) {
+			const r = dataset[i];
+			const k = r.family_number || r.family || r.dwelling;
+			if (k !== famKey) break;
+			members.push(r.full_name);
+		}
+
+		if (members.length === 0) return '<em>(No other members)</em>';
+		return members.join(', ');
+	},
+
 	renderMatches: function ()                                                     // RENDER UI
 	{
 		const $list = $('#matches-list');
@@ -558,7 +642,7 @@ const App = {
 					const detailsHtml = (m.details || '').split(', ').map(d => `<span class="ev-tag">${d}</span>`).join('');
 
 					html += `
-                        <div class="match-item" data-l70="${m.r70.line}" data-l80="${m.r80.line}">
+						<div class="match-item" data-l70="${m.r70.line}" data-l80="${m.r80.line}">
                             <div class="match-header">
                                 <span class="badge ${cls}" style="font-size:1.1em">${m.score}</span>
                             </div>
@@ -568,12 +652,14 @@ const App = {
                                     <strong>${m.r70.full_name}</strong>
                                     <span>Age: ${m.r70.age} | Born: ${m.r70.birth_year} | ${m.r70.birth_place} | ${m.r70.race}/${m.r70.gender}</span>
                                     <span>Occ: ${m.r70.occupation}</span>
+                                    <span>Household: ${this.getHouseholdMembers(m.r70, this.dsA)}</span>
                                 </div>
                                 <div class="rec">
                                     <span>${this.mode === 'dedup' ? 'Rec B' : '1880'} (Line ${m.r80.line})</span>
                                     <strong>${m.r80.full_name}</strong>
                                     <span>Age: ${m.r80.age} | Born: ${m.r80.birth_year} | ${m.r80.birth_place} | ${m.r80.race}/${m.r80.gender}</span>
                                     <span>Occ: ${m.r80.occupation}</span>
+                                    <span>Household: ${this.getHouseholdMembers(m.r80, this.dsB)}</span>
                                 </div>
                             </div>
                             <div class="evidence-list">
@@ -653,17 +739,43 @@ const App = {
 
 	exportCSV: function ()                                                         // EXPORT
 	{
-		this.log("Exporting Changes CSV...");
+		this.log("Exporting Results CSV...");
 
 		const changes = [];
 		// Only Tier 1 for changes as per request
-		this.tier1.forEach(m => {
-			changes.push({
-				theLine: m.r70.line,
-				theChange: this.nextEgoId
+
+		if (this.mode === 'dedup') {
+			// DEDUP MODE: theLine, theDupe, theScore (ALL TIERS)
+			const allTiers = [...this.tier1, ...this.tier2, ...this.tier3];
+
+			allTiers.forEach(m => {
+				changes.push({
+					theLine: m.r70.line,
+					theDupe: m.r80.line,
+					theScore: m.score
+				});
 			});
-			this.nextEgoId++;
-		});
+			this.log(`Exporting ${changes.length} duplicate pairs (All Tiers).`);
+
+		} else {
+			// MATCH MODE: theLine, theChange (nextEgoId), theScore (ALL TIERS)
+			const allTiers = [...this.tier1, ...this.tier2, ...this.tier3];
+
+			allTiers.forEach(m => {
+				changes.push({
+					theLine: m.r70.line,
+					theChange: this.nextEgoId,
+					theScore: m.score
+				});
+				this.nextEgoId++;
+			});
+			this.log(`Exported ${changes.length} matches (All Tiers). Next EgoID is now ${this.nextEgoId}`);
+		}
+
+		if (changes.length === 0) {
+			alert("No matches found to export.");
+			return;
+		}
 
 		const csv = Papa.unparse(changes);
 		const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -675,8 +787,6 @@ const App = {
 		document.body.appendChild(link);
 		link.click();
 		document.body.removeChild(link);
-
-		this.log(`Exported ${changes.length} changes. Next EgoID is now ${this.nextEgoId}`);
 	},
 
 	prefixKeys: function (obj, prefix)                                             // PREFIX KEYS
