@@ -79,12 +79,12 @@ Use only plain vanilla javascript and jQuery to do this.
 Do not use node.js
 Load the files automatically on page load.
 Add a button to start the matching process {
-	- For each person in the first dataset, find the best match in the second dataset using the method described in @BlockMatchingStrategy.md.
+	- For each person in the first dataset, find the best match in the second dataset using the method described in @BlockMatchSkill.md.
 	Add 3 tabs, one for each tier of the matching strategy.
 	Here are the thresholds for each tier {
 		- Tier 1 only includes matches that have a score above 90.
 		- Tier 2 only includes matches that have a score between 80 and 89.
-		- Tier 3 only includes matches that have a score between 70 and 79.
+		- Tier 3 only includes matches that have a score between 60 and 79.
 		}
 	-List all the matches within the tier's thresholds in the appropriate tab
 	- Limit those included in the preview tabs to the thresholds set.
@@ -123,7 +123,7 @@ Add a button to save a csv file {
 					- for each result in the Tier 1, 2, or 3 section of the matched pairs section {
 						- add a row to the changes list with the following values set: {
 							- theLine - The line number from the 1870 file.
-							- theChange - The current value in the variable nextEgoId.
+							- theChange - The line number from the 1880 file.
 							- theScore - The score of the match.
 							}
 					}
@@ -149,20 +149,26 @@ Add a button to save a csv file {
 		}
 
 	Add a pulldwown menu with the following options: {
-		- "Match 1870 to 1880"
-		- "Find 1870 Duplicates"
+		- "Match datasets"
+		- "Find duplicates"
+		- "Find relations"	
 		}	
-	- If "Match 1870 to 1880" is selected {
-		- follow the skill at @Block-matching-strategy.md
+	perform the following action when the pulldown menu is clicked: {
+		- If "Match datasets" is selected {
+			- follow the skill at @Block-matching-strategy.md
+			}
+		- If "Find relations" is selected {
+			- follow the skill at @find-relations-strategy.md
+			}
+		- If "Find duplicates" is selected {
+			- follow the skill at @Find-Duplicates-Skill.md using @ALB_1870.csv as the dataset.
+			- The line number of the result is passed to the top showContext function.
+			- The line number of the match result is passed to the bottom showContext function.
+			- Tier 1 only includes matches that have a score above 150.
+			- Tier 2 only includes matches that have a score between 140 and 149.
+			- Tier 3 only includes matches that have a score between 130 and 139.
 		}
-	- If "Find 1870 Duplicates" is selected {
-		- follow the skill at @Find-Duplicates-Skill.md using @ALBN_1870.csv as the dataset.
-		- The line number of the result is passed to the top showContext function.
-		- The line number of the match result is passed to the bottom showContext function.
-		- Tier 1 only includes matches that have a score above 150.
-		- Tier 2 only includes matches that have a score between 140 and 149.
-		- Tier 3 only includes matches that have a score between 130 and 139.
-		}
+	}
 	if (st-1870 element is clicked) {
 		Show interface to load CSV file.
 		When CSV file is loaded put data in 1870 

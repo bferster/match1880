@@ -65,25 +65,36 @@ export function jaroWinkler(s1, s2)                                            /
 export function getBlockKeys(record)                                    // GENERATE BLOCKING KEYS
 {
 	const keys = [];
-	const race = (record.race || '').substring(0, 1).toUpperCase();
-	const gender = (record.gender || '').toUpperCase();
+	const clean = (val) => (val || '').toString().trim().replace(/\s+/g, ' ').toUpperCase(); // Helper: Normalize
 
-	if (!race || !gender) return keys;                                   // Skip if missing core
+	const race = clean(record.race || 'U').substring(0, 1);             // Default to U if missing
+	const gender = clean(record.gender || 'U');                         // Default to U if missing
 
-	const nysiis_last = (record.nysiis_last_name || '').toUpperCase();
-	const norm_first = (record.norm_first_name || '').toUpperCase();
-	const last_name = (record.last_name || '').toUpperCase();
+	// NOTE: Removed strict check for race/gender to allow matching records with missing demographics
+	// if (!race || !gender) return keys; 
+
+	const nysiis_last = clean(record.nysiis_last_name);
+	const norm_first = clean(record.norm_first_name);
+	const last_name = clean(record.last_name || record['last-_name']);
 	const birth_year = record.birth_year_10 || record.birth_year;
-	const birth_place = (record.birth_place || '').toUpperCase().substring(0, 2);
+	const birth_place = clean(record.birth_place).substring(0, 2);
 
+	// Block 1: Last Name (Phonetic) + First Name (Norm) + Gender
+	// Removed Race to allow for trans-racial matches (common in census transcription errors)
 	if (nysiis_last && norm_first) {
-		keys.push(`B1:${nysiis_last}|${norm_first}|${gender}|${race}`); // Block 1
+		keys.push(`B1:${nysiis_last}|${norm_first}|${gender}`);
 	}
+
+	// Block 2: First Name (Norm) + Birth Year + Gender
+	// Catches Last Name changes (Marriage/Error)
 	if (norm_first && birth_year) {
-		keys.push(`B2:${norm_first}|${birth_year}|${gender}|${race}`);  // Block 2
+		keys.push(`B2:${norm_first}|${birth_year}|${gender}`);
 	}
+
+	// Block 3: Last Name + Birth Place + Gender
+	// Catches First Name variations (Nicknames)
 	if (last_name && birth_place) {
-		keys.push(`B3:${last_name}|${gender}|${race}|${birth_place}`);  // Block 3
+		keys.push(`B3:${last_name}|${gender}|${birth_place}`);
 	}
 	return keys;
 }
@@ -92,12 +103,13 @@ export function calculateScore(set1, set2, mode = 'match')                      
 {
 	let score = 0;                                                                       // Init score
 	const details = [];                                                                  // Init details
-	const get = (r, f) => (r[f] || '').toUpperCase();                                    // Helper: Get value as non-null U/C
+	const get = (r, f) => (r[f] || '').toString().trim().replace(/\s+/g, ' ').toUpperCase(); // Helper: Get value normalized
 	const val = (r, f) => parseInt(r[f]) || 0;                                           // Helper: Get value as non-null int
 
 	const s = {                                                                          // Normalize data
 		full1: get(set1, 'full_name'), full2: get(set2, 'full_name'),               	 // Full Names
-		last1: get(set1, 'last_name'), last2: get(set2, 'last_name'),                    // Last Names
+		last1: get(set1, 'last_name') || get(set1, 'last-_name'),
+		last2: get(set2, 'last_name') || get(set2, 'last-_name'),                        // Last Names (Support Typo)
 		first1: get(set1, 'first_name'), first2: get(set2, 'first_name'),                // First Names
 		mid1: get(set1, 'middle_name'), mid2: get(set2, 'middle_name'),                  // Middle Names
 		by1: val(set1, 'birth_year'), by2: val(set2, 'birth_year'),                      // Birth Years
@@ -114,8 +126,8 @@ export function calculateScore(set1, set2, mode = 'match')                      
 
 	// PENALTIES
 
-	if (s.gen1 !== s.gen2) { score -= 500; details.push("Gender mismatch"); }          	// Gender
-	if ((s.by2 < s.by1) && (mode == "match")) {                                         // If first is older (impossible)
+	if (s.gen1 && s.gen2 && s.gen1 !== s.gen2) { score -= 500; details.push("Gender mismatch"); }          	// Gender
+	if (s.by1 && s.by2 && (s.by2 < s.by1) && (mode == "match")) {                                         // If first is older (impossible)
 		const diff = s.by1 - s.by2;                                                    	// Diff in age
 		if (diff > 10) { score -= 100; details.push("Age regression > 10"); }           // Major rewind
 	}
@@ -125,9 +137,9 @@ export function calculateScore(set1, set2, mode = 'match')                      
 	// BIRTH
 
 	if (s.by1 === s.by2 && s.by1) { score += 50; details.push("Exact birth year"); }  	// Exact BY
-	else if (absDiff <= 2) { score += 30; details.push("Birth year +/- 2"); }           // Close BY
-	else if (absDiff <= 5) { score += 5; details.push("Birth year +/- 5"); }            // Near BY
-	else if (absDiff >= 10) { score -= 200; details.push("Birth year > 10"); }           // Far
+	else if (s.by1 && s.by2 && absDiff <= 2) { score += 30; details.push("Birth year +/- 2"); }           // Close BY
+	else if (s.by1 && s.by2 && absDiff <= 5) { score += 5; details.push("Birth year +/- 5"); }            // Near BY
+	else if (s.by1 && s.by2 && absDiff >= 10) { score -= 200; details.push("Birth year > 10"); }           // Far
 
 	// NAMES
 

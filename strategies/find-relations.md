@@ -1,0 +1,76 @@
+
+* The 1870 data set contains rows of people from the 1870 US census. It has children, spouse, and siblings fields.
+* The 1880 dataset contains rows of people from the 1880 US census. It has an additional field, “relation” which specifies the * relationship each person has with the head of the household.
+* Both datasets have a field called “egoid” that refers to the same person, and is used to link the two datasets.
+* Both datasets have a field the one called “head”. If its value is “Y”, then that person is the head of the household for a number of people in the following row.
+* Use the method in @block-matching-skill.md to find matching rows in the two datasets. 
+* Put this code in a file called relations.js.
+
+For each head of household in the 1880 dataset {
+	- skip if the head of household does not have an egoid.
+	- create a list of all rows in the 1880 dataset that have the same family field value as the head of household.
+	- set variable egoHead to the egoid of head of household in 1880 household.
+	- find the head of household where the egoid matches the one in the verified dataset. {
+		- skip if not found.	
+		- set variable ego1870 to the egoid of the head of household in the verified dataset.
+		}
+	make 2 lists of household members {
+		each list only contains members of the same family in the dataset, indicated by having the same family field.
+		list1870 contains the household members in the 1870 dataset.
+		list1880 contains the household members in the 1880 dataset.
+		}
+
+		show the results in the console.log.
+
+	for each member of list1880  {
+		if list1880’s member’s relation is “wife”  {
+			find matching name in list1870 list  {
+				skip if not found.
+				set egoWife = egoid of wife found in list1870.
+				}
+			add egoWife to spouse field in row where egoid = egoHead.
+			add egoHead to spouse field in row where egoid = egoWife.
+			}
+		}
+
+	for each member of the list1880  {
+		if list1880’s relation is “daughter” or “son” or “step-son” or “step-daughter”   {
+			find matching name in list1870 list {
+				skip if not found.
+				set egoChild = egoid of child found in list1870.
+				}
+			add egoChild to children field in row with egoid = egoHead	.
+			add egoChild to children field in row with egoid = egoWife.
+			add egoChild to siblings field in row with egoid = egoChild.
+			}
+		if list1880’s relation is “brother” or “sister” {
+			find matching name in list1870  {
+				skip if not found
+				set egoSibling = egoid of sibling list1870
+				}
+			add egoSibling to siblings field in row with egoid = egoHead.
+			add egoHead to siblings field in row with egoid = egoSibling.
+			}
+		if list1880’s relation is “brother-in-law” or “father_in_law” or “mother_in_ law” {
+			find matching name in list1870  {
+				skip if not found
+				skip if the last_name of in-law in list1870 is the same as the last_name in the egoHead row.
+				set egoMaiden = last_name of in-law in list1870.
+				}
+			add egoMaiden to maiden field in row with egoid = egoWife.
+			}
+		if list1880’s relation field is “sister -in-law” {
+			find matching name in list1870 {
+				skip if not found
+				skip if last_name is the same as last_name in egoHead row.
+				}
+			if list1880’s marital_status is "S" {
+				set egoMaiden = last_name of in-law
+				add egoMaiden to maiden field in row with egoid = egoWife.
+				}
+	    	}  
+		}
+	}
+
+Remove egoids that match main egoid in row.
+

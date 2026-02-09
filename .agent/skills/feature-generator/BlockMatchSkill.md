@@ -1,93 +1,88 @@
 ---
 name: Block matching strategy
-description: A skill to compare rows in two datasets and return a list of matched pairs.
+description: A skill to compare rows in two datasets and return a list of matched pairs including blocking, scoring, and context boosting.
 ---
 
 # Block matching strategy Skill
 
 ## Purpose
-This skill implements a multi-phase record linkage system:
+This skill implements a multi-phase record linkage system to match records between two datasets (e.g., 1870 and 1880 Census) or find duplicates within a single dataset.
 
-### PHASE 1: BLOCKING (Generate Candidate Pairs)
-Create three blocking strategies to reduce comparison space:
+## Phase 1: Blocking (Candidate Generation)
+Create blocking keys to reduce the comparison space. A pair is a candidate if it shares at least one blocking key.
 
-**Block 1:** nysiis_last_name + norm_first_name + gender + race
-- Catches straightforward matches with spelling variations
+**Block 1: Phonetic & Demographic**
+- Keys: `nysiis_last_name` + `norm_first_name` + `gender` + `race`
+- Purpose: Catches straightforward matches with spelling variations.
 
-**Block 2:** norm_first_name + birth_date_10 + gender + race  
-- Catches people whose last name changed (marriage, adoption, transcription errors)
+**Block 2: First Name & Age**
+- Keys: `norm_first_name` + `birth_year` (or `birth_year_10`) + `gender` + `race`
+- Purpose: Catches people whose last name changed (marriage, adoption, errors).
 
-**Block 3:** last_name + gender + race + birth_place
-- Catches first name variations (nicknames) with distinctive birthplaces
+**Block 3: Last Name & Birth Place**
+- Keys: `last_name` + `gender` + `race` + `birth_place` (first 2 chars)
+- Purpose: Catches first name variations with distinctive birthplaces.
 
-### PHASE 2: SCORING (Calculate Match Quality)
-For each candidate pair, calculate a weighted score:
+## Phase 2: Scoring (Match Quality)
+Calculate a weighted score for each candidate pair.
 
-**Name match** 
-	- If full_name is identical in both datasets then +100 points
-	else if last_name is identical in both datasets and first_name is identical in both datasets {
-		If there is no middle_name in both datasets then +80 points
-		else then +80 points
-		}
-	else if last_name is identical in both datasets and norm_name is identical in both datasets then +70 points
-	else if last_name is identical AND first_name Jaro-Winkler > 0.85 then +60 points
+### Base Matches
+1. **Name Match (Max one applied):**
+   - **+100 points**: Identical `full_name`.
+   - **+80 points**: Identical `last_name` AND Identical `first_name`.
+   - **+70 points**: Identical `last_name` AND Identical `norm_first_name`.
+   - **+60 points**: Identical `last_name` AND `first_name` Jaro-Winkler score > 0.85.
 
-**Birth Year Matches:**
-	- if birth_year is identical in both datasets then +50 points
-	- else if birth_year +/-2 match in both datasets then +30 points
-	- else if birth_year +/-5 match in both datasets then +5 points
+2. **Birth Year Match (Max one applied):**
+   - **+50 points**: Identical `birth_year`.
+   - **+30 points**: Difference ≤ 2 years.
+   - **+5 points**: Difference ≤ 5 years.
+   - **-200 points**: Difference ≥ 10 years.
 
-**Occupation Matches:**
-	- if norm_occupation match in both datasets then +10 points
+3. **Demographics:**
+   - **+10 points**: Identical `race`.
+   - **+10 points**: Both races are Non-White (and not identical 'W').
+   - **+10 points**: Identical `norm_occupation`.
 
-**Race Match:**
-	- if race is identical in both datasets then +10 points
-	- else if race is W both datasets then +10 points
-	- else if race does not equal W in both datasets then +10 points
-	
-**Occupation Match:**
-	- if norm_occupation match in both datasets then +10 points
+### Penalties (Red Flags)
+- **-500 points**: Gender mismatch.
+- **-100 points**: Age regression > 10 years (Target year is earlier than Source year by > 10 years) [Match Mode Only].
+- **-50 points**: Contradictory `birth_place` (Both present, not 'VA', and different).
 
-**Penalties (Red Flags):**
-	- gender mismatch: -500 points
-	- age regression (1880 birth_year < 1870 birth_year) > 5 years: -20 points
-	- age regression (1880 birth_year < 1870 birth_year) > 10 years: -100 points
-	- contradictory birth_place: -50 points
-	- nysiis_last_name mismatch: -100 points
-	- nysiis_first_name mismatch: -40 points
+## Phase 3: Classification (Tiers)
+Classify matches based on score and mode.
 
-### PHASE 4: CONFLICT RESOLUTION
-	Handle one-to-many scenarios:
-	- If multiple 1880 records match same 1870 record: keep highest score, flag others
-	- If multiple 1870 records match same 1880 record: keep highest score, flag others
-	- One person can match at most ONE person in the other census
+### Match Mode (1870 to 1880)
+- **Tier 1**: Score > 90
+- **Tier 2**: Score 80 - 90
+- **Tier 3**: Score 60 - 79
 
-### PHASE 3: CLASSIFICATION
-	Classify matches into tiers based on score:
-	- **Tier 1:** Score > 90
-	- **Tier 2:** Score between 80 and 90
-	- **Tier 3:** Score between 60 and 79
-	- Matches with score < 60 are discarded
+### Deduplication Mode (Find Duplicates)
+- **Tier 1**: Score > 150
+- **Tier 2**: Score 140 - 150
+- **Tier 3**: Score 130 - 140
 
-### PHASE 5: HOUSEHOLD CONTEXT BOOSTING
-		Use high-confidence (Tier 1 or Tier 2) matches as "anchors" to help match their household members:
+Matches below the lowest threshold are discarded.
 
-		1. For each Tier 1 match, identify their household in both censuses:
-		- 1870: all records with same dwelling number`
-		- 1880: all records with same family number
+## Phase 4: Conflict Resolution
+Handle one-to-many scenarios to ensure unique assignments.
+1. Sort all candidates by Score (Descending).
+2. Iterate through candidates:
+   - If Record A and Record B are both available, accept match.
+   - Mark Record A and Record B as "used".
+   - If either is already used, skip (Priority is given to higher scores).
 
-		2. For unmatched members of these households, add bonus points:
-		- Head of household name match: +20 points
-		- Spouse match (opposite gender, similar age): +10 points
-		- Child match (using 1880 relation field): +10 points per child, only if they are older than 10 years old
-		- Parent match: +10 points
-		- Co-residence bonus: +5 points
+## Phase 5: Household Context Boosting (Optional)
+Use high-confidence (Tier 1) matches as "anchors" to validate other household members.
 
-		3. Use 1880 relation field to validate family structure:
-		- "Self" = head of household
-		- "Wife" = spouse
-		- "Son"/"Daughter" = children
-		- Other relations: Brother, Sister, Father, Mother, Uncle, Aunt, Nephew, Niece, Mother-in-Law, Father-in-Law etc.
+1. **Identify Anchors**: Use Tier 1 matches from Phase 4.
+2. **Scan Households**: Look at all members in Anchor A's household and Anchor B's household.
+3. **Score Members**: Compare unmatched members using standard scoring.
+4. **Apply Bonuses** (if Base Score > 20):
+   - **+20 points**: Head of Household match (Name Jaro-Winkler > 0.9).
+   - **+10 points**: Spouse match (Opposite gender).
+   - **+10 points**: Child match (Target relation is Child, Age > 10).
+   - **+10 points**: Parent match (Target relation is Parent).
+   - **+5 points**: Co-residence bonus (Generic bonus for being in matched house).
 
-
-
+If the boosted score moves the match into a valid Tier, it is added to the results.

@@ -1,6 +1,7 @@
 // Imports removed to rely on Global CDN scripts (Vanilla JS/jQuery compatible)
 
 import { jaroWinkler, getBlockKeys, calculateScore } from './match.js';
+import { findRelations } from './relations.js';
 
 ///////////////////////////////////////////////////////////////////////////////
 // APP LOGIC
@@ -9,13 +10,12 @@ import { jaroWinkler, getBlockKeys, calculateScore } from './match.js';
 const App = {
 	data1870: [],
 	data1880: [],
-	// Maps to quickly find index by line number if needed, though we can assume arrays are roughly ordered or just search.
-	// For millions of records, map is better. For standard census files, lines might be sequential.
-	// We will build an index map on load.
+	verData: [],
+
 	map1870: new Map(),
 	map1880: new Map(),
 
-	nextEgoId: 1, // Default start if no file loaded
+	nextEgoId: 1,
 
 	blocks: new Map(),
 	candidates: [],
@@ -24,14 +24,11 @@ const App = {
 	tier1: [],
 	tier2: [],
 	tier3: [],
-	tier2: [],
-	tier3: [],
-	tier3: [],
 	currentTab: 1,
 
-	mode: 'match',                                                                 // 'match' or 'dedup'
-	dsA: [], dsB: [],                                                              // Active datasets
-	mapA: null, mapB: null,                                                        // Active maps
+	mode: 'match',
+	dsA: [], dsB: [],
+	mapA: null, mapB: null,
 
 	searchIndex: -1,
 	searchTerm: '',
@@ -69,12 +66,12 @@ const App = {
 		]).then(results => {
 			this.data1870 = results[0];
 			this.data1880 = results[1];
-			const verData = results[2];
+			this.verData = results[2]; // STORE VERIFIED DATA
 
 			// Calculate nextEgoId
 			let maxId = 0;
-			if (verData && verData.length > 0) {
-				verData.forEach(row => {
+			if (this.verData && this.verData.length > 0) {
+				this.verData.forEach(row => {
 					const id = parseInt(row.egoid);
 					if (!isNaN(id) && id > maxId) maxId = id;
 				});
@@ -116,6 +113,9 @@ const App = {
 			if (this.mode === 'dedup') {
 				$('#ctx-head-top').text('1870 Record A (±12 Rows)');
 				$('#ctx-head-btm').text('1870 Record B (±12 Rows)');
+			} else if (this.mode === 'relations') {
+				$('#ctx-head-top').text('Relation Details');
+				$('#ctx-head-btm').text('1880 Record');
 			} else {
 				$('#ctx-head-top').text('1870 Census Context (±12 Rows)');
 				$('#ctx-head-btm').text('1880 Census Context (±12 Rows)');
@@ -213,6 +213,11 @@ const App = {
 
 	startBlocking: function ()                                                     // PHASE 1: GENERATE BLOCKS
 	{
+		if (this.mode === 'relations') {
+			findRelations(this);
+			return;
+		}
+
 		this.log("Phase 1: Blocking...");
 		this.progress(10, "Generating blocks");
 
@@ -594,8 +599,9 @@ const App = {
 		// Scan up
 		for (let i = trueIdx - 1; i >= 0; i--) {
 			const r = dataset[i];
-			const k = r.family_number || r.family || r.dwelling;
+			const k = r.family || r.dwelling;
 			if (k !== famKey) break;
+			if (r.full_name === record.full_name) continue;
 			members.unshift(r.full_name);
 		}
 
@@ -604,8 +610,10 @@ const App = {
 			const r = dataset[i];
 			const k = r.family_number || r.family || r.dwelling;
 			if (k !== famKey) break;
+			if (r.full_name === record.full_name) continue;
 			members.push(r.full_name);
 		}
+
 
 		if (members.length === 0) return '<em>(No other members)</em>';
 		return members.join(', ');
@@ -758,18 +766,17 @@ const App = {
 			this.log(`Exporting ${changes.length} duplicate pairs (All Tiers).`);
 
 		} else {
-			// MATCH MODE: theLine, theChange (nextEgoId), theScore (ALL TIERS)
+			// MATCH MODE: theLine, theChange (1880 Line), theScore (ALL TIERS)
 			const allTiers = [...this.tier1, ...this.tier2, ...this.tier3];
 
 			allTiers.forEach(m => {
 				changes.push({
 					theLine: m.r70.line,
-					theChange: this.nextEgoId,
+					theChange: m.r80.line,
 					theScore: m.score
 				});
-				this.nextEgoId++;
 			});
-			this.log(`Exported ${changes.length} matches (All Tiers). Next EgoID is now ${this.nextEgoId}`);
+			this.log(`Exported ${changes.length} matches (All Tiers).`);
 		}
 
 		if (changes.length === 0) {
