@@ -93,12 +93,22 @@ Add a button to start the matching process {
 	- Add a checkbox on the right side of the line with the save button to tell the matching algorithm to implement household context boosting. If checked, the matching algorithm will implement household context boosting.
 
 Matched Pairs Panel {
-	- for each matched pair {
-		- Show all of the matched pairs along with criteria at bottom of matched pair on which the were matched and their scores.
-		- Show full_names of all people in family of the matched pair.
+	if method == "match" or method == "find-duplicates" {
+		- for each matched pair {
+			- Show all of the matched pairs along with criteria at bottom of matched pair on which the were matched and their scores.
+			- Show full_names of all people in family of the matched pair.
+			}
 		}
+	else if method == "relations" {
+		- for each relation that is not match to itself	 {
+			- show the relations found {
+				- full_name of head of household.
+				- egoid of head of household.
+				- full_name of relation.
+				- egoid of relation.
+				}
+			}
 	}
-
 
 Census Context Panel {
 	- The context-panel is split into two scrollable sections, one for the 1870 census and one for the 1880 census.
@@ -120,14 +130,16 @@ Census Context Panel {
 Add a button to save a csv file {
 	When clicked {
 		- if matching {
-					- for each result in the Tier 1, 2, or 3 section of the matched pairs section {
-						- add a row to the changes list with the following values set: {
-							- theLine - The line number from the 1870 file.
-							- theChange - The line number from the 1880 file.
-							- theScore - The score of the match.
+					- ask for cutoff score
+					- clear all rows of the egoid column in the 1880 list.
+					- for each row in the 1870 list {
+						- if the row has a match in the 1880 list and score  equal to or above cutoff {
+							- add the "1e+egoid of the 1870 row to the egoid column of the 1880 row	
 							}
-					}
-			}
+						}
+				copy the egoid column from the 1880 list to clipboard.
+				don't save to file.	
+				}
 			- else if finding duplicates {
 				- for each result in the Tier 1, 2, or 3 section of the matched pairs section {
 					- add a row to the changes list with the following values set: {
@@ -136,13 +148,17 @@ Add a button to save a csv file {
 						- theScore - The score of the match.
 						}
 					}
-			}
+				}
+			- else if relations {
+				-don't score candidates in relations.
+				}
 		}
 		- Use the @SaveChanges.md skill to save the changes.
 	}
 
 	Add search box at top of matched pairs section to scroll to found string in any pair: {
-		- Start searching from the top. 
+		- find should search in the data in the matched pairs panel
+		Start searching from the top. 
 		- Ignore case. 
 		- Clicking again finds the next match that fits the search term.
 		- Find should find any occurance of search string in full match result.

@@ -66,7 +66,7 @@ const App = {
 		]).then(results => {
 			this.data1870 = results[0];
 			this.data1880 = results[1];
-			this.verData = results[2]; // STORE VERIFIED DATA
+			this.verData = results[2];                                             // STORE VERIFIED DATA
 
 			// Calculate nextEgoId
 			let maxId = 0;
@@ -81,8 +81,6 @@ const App = {
 
 			// Build Index Maps
 			// Ensure line is string for consistency as CSV parsing might vary
-			// But PapaParse header:true usually returns strings.
-			// Let's force string keys.
 			this.data1870.forEach((r, i) => this.map1870.set(String(r.line), i));
 			this.data1880.forEach((r, i) => this.map1880.set(String(r.line), i));
 
@@ -90,14 +88,14 @@ const App = {
 			this.setStatus('st-1880', `Loaded (${this.data1880.length})`, 'ready');
 			this.log("Data loaded. Ready to start.");
 
-			$('#btn-run').prop('disabled', false);                                   // Enable run
+			$('#btn-run').prop('disabled', false);                                 // Enable run
 
 		}).catch(err => {
 			this.log("Error loading data: " + err);
 		});
 
 
-		$('#btn-run').on('click', () => {                                            // HANDLER: RUN
+		$('#btn-run').on('click', () => {                                          // HANDLER: RUN
 			$('#btn-run').prop('disabled', true);
 			$('#sel-mode').prop('disabled', true);
 
@@ -124,14 +122,14 @@ const App = {
 			setTimeout(() => this.startBlocking(), 100);
 		});
 
-		$('#btn-save').on('click', () => this.exportCSV());                          // HANDLER: SAVE
+		$('#btn-save').on('click', () => this.exportCSV());                        // HANDLER: SAVE
 
-		$('.tab-btn').on('click', (e) => {                                           // HANDLER: TAB
+		$('.tab-btn').on('click', (e) => {                                         // HANDLER: TAB
 			const t = $(e.currentTarget).data('tab');
 			this.switchTab(t);
 		});
 
-		$('#btn-search').on('click', () => this.findNext());                         // HANDLER: SEARCH
+		$('#btn-search').on('click', () => this.findNext());                       // HANDLER: SEARCH
 		$('#inp-search').on('keypress', (e) => {
 			if (e.which === 13) this.findNext();
 		});
@@ -139,13 +137,13 @@ const App = {
 
 
 		// Delegation for match item clicks
-		$('#st-1870').on('click', () => $('#file-1870').trigger('click'));           // CLICK 1870
-		$('#st-1880').on('click', () => $('#file-1880').trigger('click'));           // CLICK 1880
+		$('#st-1870').on('click', () => $('#file-1870').trigger('click'));         // CLICK 1870
+		$('#st-1880').on('click', () => $('#file-1880').trigger('click'));         // CLICK 1880
 
-		$('#file-1870').on('change', (e) => this.loadLocalFile(e, 1870));            // LOAD 1870
-		$('#file-1880').on('change', (e) => this.loadLocalFile(e, 1880));            // LOAD 1880
+		$('#file-1870').on('change', (e) => this.loadLocalFile(e, 1870));          // LOAD 1870
+		$('#file-1880').on('change', (e) => this.loadLocalFile(e, 1880));          // LOAD 1880
 
-		$(document).on('click', '.match-item', (e) => {                              // HANDLER: MATCH CLICK
+		$(document).on('click', '.match-item', (e) => {                            // HANDLER: MATCH CLICK
 			// Visual feedback
 			$('.match-item').removeClass('active-match');
 			$(e.currentTarget).css('background-color', '#eff6ff');
@@ -224,7 +222,7 @@ const App = {
 		// Set active datasets
 		if (this.mode === 'dedup') {
 			this.dsA = this.data1870;
-			this.dsB = this.data1870; // Self match
+			this.dsB = this.data1870;                                              // Self match
 			this.mapA = this.map1870;
 			this.mapB = this.map1870;
 		} else {
@@ -240,7 +238,7 @@ const App = {
 		// Dataset A
 		this.dsA.forEach(row => {
 			const keys = getBlockKeys(row);
-			keys.forEach(k => this.addToBlock(k, row, 70)); // Using 70 as "List A"
+			keys.forEach(k => this.addToBlock(k, row, 70));                        // Using 70 as "List A"
 		});
 
 		// Dataset B
@@ -248,7 +246,7 @@ const App = {
 		// Yes, we will have every item in both lists.
 		this.dsB.forEach(row => {
 			const keys = getBlockKeys(row);
-			keys.forEach(k => this.addToBlock(k, row, 80)); // Using 80 as "List B"
+			keys.forEach(k => this.addToBlock(k, row, 80));                        // Using 80 as "List B"
 		});
 
 		this.log(`Generated ${this.blocks.size} blocks.`);
@@ -273,7 +271,7 @@ const App = {
 		const candidateMap = new Map();
 
 		let processed = 0;
-		const CHUNK_SIZE = 1000;                                             // Process in chunks
+		const CHUNK_SIZE = 1000;                                                   // Process in chunks
 
 		const processChunk = () => {
 			const limit = Math.min(processed + CHUNK_SIZE, totalBlocks);
@@ -292,7 +290,7 @@ const App = {
 							}
 
 							const pairId = `${r70.line}-${r80.line}`;
-							if (candidateMap.has(pairId)) continue;              // Skip duplicates
+							if (candidateMap.has(pairId)) continue;                // Skip duplicates
 
 							const res = calculateScore(r70, r80, this.mode);
 
@@ -324,7 +322,7 @@ const App = {
 			if (processed % 5000 === 0) this.progress(pct, `Scoring... (${processed}/${totalBlocks})`);
 
 			if (processed < totalBlocks) {
-				setTimeout(processChunk, 0);                                     // Yield
+				setTimeout(processChunk, 0);                                       // Yield
 			} else {
 				this.candidates = Array.from(candidateMap.values());
 				this.log(`Scored ${this.candidates.length} candidate pairs.`);
@@ -357,7 +355,7 @@ const App = {
 
 			// One person can match at most ONE person in the other census
 			// In dedup mode, we also want unique pairings. 
-			if (used70.has(id70) || used80.has(id80)) continue;                  // Skip duplicates
+			if (used70.has(id70) || used80.has(id80)) continue;                    // Skip duplicates
 
 			used70.add(id70);
 			used80.add(id80);
@@ -387,7 +385,7 @@ const App = {
 		const houseB = new Map();
 
 		// Generic Family Key Helper
-		const getFamKey = (r) => r.family_number || r.family || r.dwelling;
+		const getFamKey = (r) => r.family;
 
 		this.dsA.forEach(r => {
 			const k = getFamKey(r);
@@ -518,7 +516,6 @@ const App = {
 		this.progress(90, "Finalizing");
 
 		this.candidates.sort((a, b) => b.score - a.score);
-
 		const used70 = new Set();
 		const used80 = new Set();
 
@@ -528,21 +525,20 @@ const App = {
 
 		let count = 0;
 		for (const cand of this.candidates) {
+
 			const id70 = cand.r70.line;
 			const id80 = cand.r80.line;
 
 			if (this.mode === 'dedup') {
 				// Dedup: ID space is shared. Ensure unique row usage globally.
 				if (used70.has(id70) || used70.has(id80)) continue;
-				used70.add(id70);
-				used70.add(id80);
-			} else {
+			}
+			else if (this.mode === 'match') {
 				// Match: Distinct ID spaces.
 				if (used70.has(id70) || used80.has(id80)) continue;
-				used70.add(id70);
-				used80.add(id80);
 			}
-
+			used70.add(id70);
+			used80.add(id80);
 			if (cand.tier === 1) this.tier1.push(cand);
 			else if (cand.tier === 2) this.tier2.push(cand);
 			else if (cand.tier === 3) this.tier3.push(cand);
@@ -579,14 +575,8 @@ const App = {
 
 	getHouseholdMembers: function (record, dataset)                                // GET HOUSEHOLD
 	{
-		const famKey = record.family_number || record.family || record.dwelling;
+		const famKey = record.family;
 		if (!famKey) return '(No Family ID)';
-
-		// This is O(N) per call which is slow for rendering list.
-		// Optimized: We access by line index if sorted, but dataset is just array.
-		// Ideally we pre-index families. But for now, let's filter.
-		// LIMITATION: Use map for speed if slow.
-
 		// Identify Map
 		let map = this.map1870;
 		if (dataset === this.data1880) map = this.map1880;
@@ -599,7 +589,7 @@ const App = {
 		// Scan up
 		for (let i = trueIdx - 1; i >= 0; i--) {
 			const r = dataset[i];
-			const k = r.family || r.dwelling;
+			const k = r.family;
 			if (k !== famKey) break;
 			if (r.full_name === record.full_name) continue;
 			members.unshift(r.full_name);
@@ -608,7 +598,7 @@ const App = {
 		// Scan down
 		for (let i = trueIdx + 1; i < dataset.length; i++) {
 			const r = dataset[i];
-			const k = r.family_number || r.family || r.dwelling;
+			const k = r.family;
 			if (k !== famKey) break;
 			if (r.full_name === record.full_name) continue;
 			members.push(r.full_name);
@@ -640,42 +630,88 @@ const App = {
 			if (data.length === 0) {
 				$list.html('<div style="padding:20px; text-align:center; color:#666">No matches in this tier.</div>');
 			} else {
-				// Show ALL matches (User requested)
 				let html = '';
-				data.forEach(m => {
-					let cls = 'score-low';
-					if (m.score > 90) cls = 'score-high';
-					else if (m.score >= 80) cls = 'score-med';
 
-					const detailsHtml = (m.details || '').split(', ').map(d => `<span class="ev-tag">${d}</span>`).join('');
+				if (this.mode === 'relations') {
+					console.log(data);
+					// SPECIAL RENDERER FOR RELATIONS
 
-					html += `
-						<div class="match-item" data-l70="${m.r70.line}" data-l80="${m.r80.line}">
-                            <div class="match-header">
-                                <span class="badge ${cls}" style="font-size:1.1em">${m.score}</span>
+					data.forEach(m => {
+						// m.head = 1880 Head Record
+						// m.relation = 1870 Match Record
+						// m.details = "Wife Found", etc.
+
+						const rHead = m.head || m.r1880; // Fallback
+						const rRel = m.relation || m.rRelation;
+
+						if (!rHead) return; // Should not happen
+						if (rRel.egoid === rHead.egoid) return;					// PROMPT: "for each relation that is not match to itself"
+
+
+						let cls = 'score-high'; // Relations are usually high confidence by definition of the algo
+
+						html += `
+						<div class="match-item" data-l70="${rRel.line || 0}" data-l80="${rHead.line || 0}">
+                             <div class="match-header">
+                                <span class="badge ${cls}" style="font-size:1.1em">REL</span>
                             </div>
                             <div class="match-grid">
                                 <div class="rec">
-                                    <span>${this.mode === 'dedup' ? 'Rec A' : '1870'} (Line ${m.r70.line})</span>
-                                    <strong>${m.r70.full_name}</strong>
-                                    <span>Age: ${m.r70.age} | Born: ${m.r70.birth_year} | ${m.r70.birth_place} | ${m.r70.race}/${m.r70.gender}</span>
-                                    <span>Occ: ${m.r70.occupation}</span>
-                                    <span>Household: ${this.getHouseholdMembers(m.r70, this.dsA)}</span>
+                                    <span>1880 Head / Context</span>
+                                    <strong>${rHead.full_name}</strong>
+                                    <span>ID: ${rHead.egoid}</span>
+                                    <span>Age: ${rHead.age} | ${rHead.occupation}</span>
+                                    <div style="margin-top:4px; font-size:0.9em; color:#666">
+                                    	<em>${m.details}</em>
+                                    </div>
                                 </div>
                                 <div class="rec">
-                                    <span>${this.mode === 'dedup' ? 'Rec B' : '1880'} (Line ${m.r80.line})</span>
-                                    <strong>${m.r80.full_name}</strong>
-                                    <span>Age: ${m.r80.age} | Born: ${m.r80.birth_year} | ${m.r80.birth_place} | ${m.r80.race}/${m.r80.gender}</span>
-                                    <span>Occ: ${m.r80.occupation}</span>
-                                    <span>Household: ${this.getHouseholdMembers(m.r80, this.dsB)}</span>
+                                    <span>1870 Relation Found</span>
+                                    <strong>${rRel.full_name || 'Unknown'}</strong>
+                                    <span>ID: ${rRel.egoid || '?'}</span>
+                                    <span>Age: ${rRel.age} | ${rRel.occupation}</span>
+                                    <span>Relation: ${rRel.relation || '-'}</span>
                                 </div>
                             </div>
-                            <div class="evidence-list">
-                                ${detailsHtml}
-                            </div>
-                        </div>
-                    `;
-				});
+                        </div>`;
+					});
+				} else {
+					// STANDARD RENDERER (Match / Dedup)
+					data.forEach(m => {
+						let cls = 'score-low';
+						if (m.score > 90) cls = 'score-high';
+						else if (m.score >= 80) cls = 'score-med';
+
+						const detailsHtml = (m.details || '').split(', ').map(d => `<span class="ev-tag">${d}</span>`).join('');
+
+						html += `
+							<div class="match-item" data-l70="${m.r70.line}" data-l80="${m.r80.line}">
+								<div class="match-header">
+									<span class="badge ${cls}" style="font-size:1.1em">${m.score}</span>
+								</div>
+								<div class="match-grid">
+									<div class="rec">
+										<span>${this.mode === 'dedup' ? 'Rec A' : '1870'} (Line ${m.r70.line})</span>
+										<strong>${m.r70.full_name}</strong>
+										<span>Age: ${m.r70.age} | Born: ${m.r70.birth_year} | ${m.r70.birth_place} | ${m.r70.race}/${m.r70.gender}</span>
+										<span>Occ: ${m.r70.occupation}</span>
+										<span>Household: ${this.getHouseholdMembers(m.r70, this.dsA)}</span>
+									</div>
+									<div class="rec">
+										<span>${this.mode === 'dedup' ? 'Rec B' : '1880'} (Line ${m.r80.line})</span>
+										<strong>${m.r80.full_name}</strong>
+										<span>Age: ${m.r80.age} | Born: ${m.r80.birth_year} | ${m.r80.birth_place} | ${m.r80.race}/${m.r80.gender}</span>
+										<span>Occ: ${m.r80.occupation}</span>
+										<span>Household: ${this.getHouseholdMembers(m.r80, this.dsB)}</span>
+									</div>
+								</div>
+								<div class="evidence-list">
+									${detailsHtml}
+								</div>
+							</div>
+						`;
+					});
+				}
 				$list.html(html);
 			}
 
@@ -701,7 +737,7 @@ const App = {
 			const centerIdx = map.get(lineKey);
 			// 12 rows above, 12 rows below
 			const start = Math.max(0, centerIdx - 12);
-			const end = Math.min(data.length, centerIdx + 12 + 1);               // +1 because slice is exclusive
+			const end = Math.min(data.length, centerIdx + 12 + 1);                 // +1 because slice is exclusive
 
 			const rows = data.slice(start, end);
 
@@ -747,13 +783,11 @@ const App = {
 
 	exportCSV: function ()                                                         // EXPORT
 	{
-		this.log("Exporting Results CSV...");
-
-		const changes = [];
-		// Only Tier 1 for changes as per request
+		this.log("Exporting Results...");
 
 		if (this.mode === 'dedup') {
 			// DEDUP MODE: theLine, theDupe, theScore (ALL TIERS)
+			const changes = [];
 			const allTiers = [...this.tier1, ...this.tier2, ...this.tier3];
 
 			allTiers.forEach(m => {
@@ -765,35 +799,96 @@ const App = {
 			});
 			this.log(`Exporting ${changes.length} duplicate pairs (All Tiers).`);
 
+			if (changes.length === 0) {
+				alert("No matches found to export.");
+				return;
+			}
+
+			const csv = Papa.unparse(changes);
+			const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+			const link = document.createElement("a");
+			const url = URL.createObjectURL(blob);
+			link.setAttribute("href", url);
+			link.setAttribute("download", "duplicates.csv");
+			link.style.visibility = 'hidden';
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+
 		} else {
-			// MATCH MODE: theLine, theChange (1880 Line), theScore (ALL TIERS)
+			// MATCH MODE: Update 1880 egoid column & Copy to Clipboard
+			const cutoffStr = prompt("Enter cutoff score (e.g. 90):", "90");
+			if (cutoffStr === null) return;                                        // Cancelled
+			const cutoff = parseInt(cutoffStr, 10) || 90;
+
+			this.log(`Applying cutoff ${cutoff} to matches...`);
+
+			// 1. Build Index of Matches meeting cutoff
+			// Map: Line 1880 -> Egoid 1870
+			const matches80 = new Map();
 			const allTiers = [...this.tier1, ...this.tier2, ...this.tier3];
 
+			let matchCount = 0;
 			allTiers.forEach(m => {
-				changes.push({
-					theLine: m.r70.line,
-					theChange: m.r80.line,
-					theScore: m.score
-				});
+				if (m.score >= cutoff) {
+					// Check if r70 has egoid
+					if (m.r70.egoid) {
+						// Store the 1870 egoid mapped to the 1880 line with "1e" prefix
+						matches80.set(String(m.r80.line), '1e' + m.r70.egoid);
+						matchCount++;
+					}
+				}
 			});
-			this.log(`Exported ${changes.length} matches (All Tiers).`);
-		}
 
-		if (changes.length === 0) {
-			alert("No matches found to export.");
-			return;
-		}
+			this.log(`Found ${matchCount} matches above score ${cutoff} with valid source IDs.`);
 
-		const csv = Papa.unparse(changes);
-		const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-		const link = document.createElement("a");
-		const url = URL.createObjectURL(blob);
-		link.setAttribute("href", url);
-		link.setAttribute("download", "changes.csv");
-		link.style.visibility = 'hidden';
-		document.body.appendChild(link);
-		link.click();
-		document.body.removeChild(link);
+			// 2. Update 1880 Dataset & Collect EgoIDs
+			// First, clear ALL egoid values in 1880 dataset as requested
+			this.data1880.forEach(r => r.egoid = '');
+
+			// We iterate the original 1880 list to preserve order
+			const egoIdParams = [];
+
+			this.data1880.forEach(r80 => {
+				const lineKey = String(r80.line);
+				if (matches80.has(lineKey)) {
+					// Update the record in memory (optional, but requested "add the egoid... to the row")
+					r80.egoid = matches80.get(lineKey);
+				}
+				// Collect for clipboard - ensure string
+				egoIdParams.push(r80.egoid || "");
+			});
+
+			// 3. Copy to Clipboard
+			const clipboardText = egoIdParams.join('\n');
+
+			// Try navigator first
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				navigator.clipboard.writeText(clipboardText).then(() => {
+					alert(`Success! Copied ${egoIdParams.length} rows (Column: egoid) to clipboard.\nMatches applied: ${matchCount}`);
+				}).catch(err => {
+					console.error("Clipboard write failed", err);
+					this.fallbackCopy(clipboardText, egoIdParams.length);
+				});
+			} else {
+				this.fallbackCopy(clipboardText, egoIdParams.length);
+			}
+		}
+	},
+
+	fallbackCopy: function (text, count) {
+		const textarea = document.createElement('textarea');
+		textarea.value = text;
+		document.body.appendChild(textarea);
+		textarea.select();
+		try {
+			document.execCommand('copy');
+			alert(`Copied to clipboard (fallback). Rows: ${count}`);
+		} catch (err) {
+			console.error("Fallback copy failed", err);
+			alert("Failed to copy to clipboard.");
+		}
+		document.body.removeChild(textarea);
 	},
 
 	prefixKeys: function (obj, prefix)                                             // PREFIX KEYS
@@ -836,6 +931,7 @@ const App = {
 
 		for (let i = start; i < data.length; i++) {
 			const item = data[i];
+			console.log(item);
 			// Search in full match result (data object)
 			// usage of JSON.stringify to catch all field values
 			const content = JSON.stringify(item).toLowerCase();

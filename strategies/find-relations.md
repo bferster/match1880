@@ -20,8 +20,8 @@ For each head of household in the 1880 dataset {
 		list1880 contains the household members in the 1880 dataset.
 		}
 
-		show the results in the console.log.
-
+	whenever you find a match, add it to the list of matches, when showing matched pairs.
+		
 	for each member of list1880  {
 		if list1880’s member’s relation is “wife”  {
 			find matching name in list1870 list  {

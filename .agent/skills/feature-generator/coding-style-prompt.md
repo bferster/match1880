@@ -121,6 +121,7 @@ Use the following rules when generating HTML, CSS, and JavaScript code for me. T
   ```
 - **Inline comments** are right-aligned, short, and in **Title Case or sentence fragments**: `// Set mobile flag`, `// Quit if bad`, `// Add to obj`.
 - **Method header comments** are ALL CAPS on the same line as the signature: `// PLAY OR PAUSE`, `// CONSTRUCTOR`.
+make comments line up on tab breaks
 
 ---
 
