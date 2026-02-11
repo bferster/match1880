@@ -31,100 +31,134 @@ export function findRelations(app)                                             /
 
 	app.candidates = []; // Clear existing candidates
 
-	heads1880.forEach(head80 => {                                              // LOOP 1880 HEADS
-		const egoHead = head80.egoid;                                          // Get 1880 Head egoid
-		const list1880 = house1880.get(head80.family) || [];                   // Get 1880 Members
-		const head1870Record = app.data1870.find(r => r.egoid === egoHead);    // Get 1870 Head Record
-		if (!head1870Record) return;                                           // Skip if not found
+	// HELPER: SCORING STRATEGY (Moved outside loop for scope)
+	const findBestMatch = (member80, candidates) => {
+		let best = null;
+		let maxScore = -1;
 
-		const list1870 = house1870.get(head1870Record.family) || [];           // Get 1870 Members
+		candidates.forEach(member70 => {
+			let score = 0;
+			// Name
+			const n1 = (member70.first_name || '').toLowerCase().trim();
+			const n2 = (member80.first_name || '').toLowerCase().trim();
+			const nm1 = (member70.norm_first_name || '').toLowerCase().trim();
+			const nm2 = (member80.norm_first_name || '').toLowerCase().trim();
 
-		const findIn1870 = (criteriaFn) => {                           			// HELPER: FIND IN 1870
-			return list1870.find(v => criteriaFn(v));
-		};
+			if (n1 === n2 && n1) score += 100;
+			else if (jaroWinkler(n1, n2) > 0.85) score += 80;
+			else if (nm1 === nm2 && nm1) score += 60;
+			else if (jaroWinkler(n1, n2) > 0.7) score += 40;
 
-		// Helper to push candidate
-		const addMatch = (r80, rRel, type, note) => {
-			app.candidates.push({
-				head: head80,      // Head of Household Context
-				relation: rRel,    // The relation found
-				r70: head80,      	 // Compatibility
-				r80: rRel,
-				details: `${type} Found`,
-				tier: 1
-			});
-			relationsFound++;
-		};
+			// Age
+			const y1 = parseInt(member70.birth_year) || 0;
+			const y2 = parseInt(member80.birth_year) || 0;
+			if (y1 && y2) {
+				const diff = Math.abs(y1 - y2);
+				if (diff === 0) score += 100;
+				else if (diff <= 2) score += 80;
+				else if (diff <= 5) score += 40;
+			}
 
-		// WIFE PROCESSING		
-		list1880.forEach(member80 => {                                         	// LOOP MEMBERS
-			const rel = (member80.relation || '').toLowerCase();               	// Get Relation
-			if (rel === 'wife') {                                              	// IF WIFE
-				const match = findIn1870(v => isNameMatch(v.first_name, member80.first_name)); // find matching name in list1870 list
-				if (match) {                                                   	// IF MATCH FOUND
-					console.log(`WIFE ${match.full_name} -> ${head80.full_name} ${match.egoid}/${head80.egoid}`);
-					addMatch(member80, match, 'Spouse', `Wife of Head`);
-				}
+			if (score > maxScore) {
+				maxScore = score;
+				best = member70;
 			}
 		});
 
-		// CHILD / SIBLING / IN-LAW PROCESSING
-		list1880.forEach(member80 => {                                         // LOOP MEMBERS
-			const rel = (member80.relation || '').toLowerCase();               // Get Relation
+		if (maxScore > 60) return best;
+		return null;
+	};
 
-			// CHILDREN
-			if (['daughter', 'son', 'step-son', 'step-daughter'].includes(rel)) {
-				const match = findIn1870(v => isNameMatch(v.first_name, member80.first_name));
-				if (match) {                                                   // IF MATCH FOUND
-					console.log(`CHILD ${match.full_name} -> ${head80.full_name} ${match.egoid}/${head80.egoid}`);
-					addMatch(member80, match, 'Child', `Child of Head`);
+	// HELPER: ADD MATCH (Modified to take head80 as arg)
+	const addMatch = (head80, r80, rRel, type, note) => {
+		if (rRel.egoid === head80.egoid) return;           					// Skip self-matches
+		app.candidates.push({
+			head: head80,      												// Head of Household Context
+			relation: rRel,    												// The relation found (1870 member)
+			spouses: r80,													// The 1880 member (relation source) - ALIAS for user logic compatibility
+			r70: head80,      												// Compatibility
+			r80: rRel,
+			details: `${type} Found`,
+			tier: 1
+		});
+		relationsFound++;
+	};
+
+
+	// ASYNC PROCESSING CHUNK
+	let processed = 0;
+	const total = heads1880.length;
+	const CHUNK_SIZE = 50;
+
+	const processChunk = () => {
+		const limit = Math.min(processed + CHUNK_SIZE, total);
+
+		for (let i = processed; i < limit; i++) {
+			const head80 = heads1880[i];
+			const egoHead = head80.egoid;                                          // Get 1880 Head egoid
+			const list1880 = house1880.get(head80.family) || [];                   // Get 1880 Members
+			const head1870Record = app.data1870.find(r => r.egoid === egoHead);    // Get 1870 Head Record
+
+			if (!head1870Record) continue;                                           // Skip if not found
+
+			const list1870 = house1870.get(head1870Record.family) || [];           // Get 1870 Members
+
+			// PROCESS MEMBERS
+			list1880.forEach(member80 => {
+				const rel = (member80.relation || '').toLowerCase();
+				let type = '';
+				let note = '';
+
+				if (rel === 'wife') { type = 'Spouse'; note = 'Wife of Head'; }
+				else if (['daughter', 'son', 'step-son', 'step-daughter'].includes(rel)) { type = 'Child'; note = 'Child of Head'; }
+				else if (['grand-daughter', 'grand-son'].includes(rel)) { type = 'Grand-child'; note = 'Grand-child of Head'; }
+				else if (['brother', 'sister'].includes(rel)) { type = 'Sibling'; note = 'Sibling of Head'; }
+				else if (['mother'].includes(rel)) { type = 'Mother'; note = 'Mother of Head'; }
+				else if (['father'].includes(rel)) { type = 'Father'; note = 'Father of Head'; }
+				else if (['brother-in-law', 'father_in_law', 'mother_in_law', 'brother-in-law'].some(x => rel.includes(x.replace(/_/g, '-')))) {
+					type = 'In-Law'; note = `Via ${rel}`;
+					if ((member80.last_name || '') === head80.last_name && type === 'In-Law') type = '';
 				}
-			}
-
-			// SIBLINGS
-			if (['brother', 'sister'].includes(rel)) {                         // IF SIBLING
-				const match = findIn1870(v => isNameMatch(v.first_name, member80.first_name));
-				if (match) {                                                   // IF MATCH FOUND
-					console.log(`SIBLING ${match.full_name} -> ${head80.full_name} ${match.egoid}/${head80.egoid}`);
-					addMatch(member80, match, 'Sibling', `Sibling of Head`);
+				else if (rel.includes('sister') && rel.includes('law')) {
+					type = 'Sister-in-law'; note = 'Via Sister-in-law';
 				}
-			}
 
-			// IN-LAWS
-			if (['brother-in-law', 'father_in_law', 'mother_in_law', 'brother-in-law'].some(x => rel.includes(x.replace(/_/g, '-')))) {
-				const match = findIn1870(v => isNameMatch(v.first_name, member80.first_name));
-				if (match) {                                                   // IF MATCH FOUND
-					const inLawName = match.last_name || '';                   // Get Name
-					if (inLawName !== head80.last_name) {                      // If Not Same Last Name
-						addMatch(member80, match, 'Maiden Name', `Via ${rel}`);
-						console.log(`IN-LAW ${match.full_name} -> ${head80.full_name} ${match.egoid}/${head80.egoid}`);
-					}
-				}
-			}
-
-			// SISTER-IN-LAW
-			if (rel.includes('sister') && rel.includes('law')) {               // IF SIS IN LAW
-				const match = findIn1870(v => isNameMatch(v.first_name, member80.first_name));
-				if (match) {                                                   // IF MATCH FOUND
-					const inLawName = match.last_name || '';                   // Get Name
-					if (inLawName !== head80.last_name) {                      // If Not Same Last Name
-						const mStat = (member80.marital || member80.marital_status || '').toUpperCase();
-						if (mStat === 'S') {                                   // If Single
-							addMatch(member80, match, 'Maiden Name', `Via Sister-in-law`);
-							console.log(`SISTER ${match.full_name} -> ${head80.full_name} ${match.egoid}/${head80.egoid}`);
+				if (type) {
+					const match = findBestMatch(member80, list1870);
+					if (match) {
+						if (type === 'In-Law' || type === 'Sister-in-law') {
+							const inLawName = match.last_name || '';
+							if (inLawName === head80.last_name) return;
+							if (type === 'Sister-in-law') {
+								const mStat = (member80.marital || member80.marital_status || '').toUpperCase();
+								if (mStat !== 'S') return;
+							}
 						}
+						addMatch(head80, member80, match, type, note);
 					}
 				}
-			}
-		});
-	});
+			});
+		}
 
-	// Cleanup
-	app.data1880.forEach(r => {                                                // FILTER SELF FROM DATA
-		const myId = r.egoid;                                                  // Get Egoid
-		if (!myId) return;                                                     // Skip if none
-	});
+		processed = limit;
+		if (processed % 100 === 0) {
+			const pct = Math.round((processed / total) * 100);
+			app.progress(pct, `Scanning relations (${processed}/${total})`);
+		}
 
-	app.log(`Relations found: ${relationsFound}`);                             // LOG TOTAL
-	app.finalizeResults();                                                     // FINALIZE
+		if (processed < total) {
+			setTimeout(processChunk, 0);
+		} else {
+			// DONE
+			app.data1880.forEach(r => {                                                // FILTER SELF FROM DATA
+				const myId = r.egoid;                                                  // Get Egoid
+				if (!myId) return;                                                     // Skip if none
+			});
+
+			app.log(`Relations found: ${relationsFound}`);                             // LOG TOTAL
+			app.finalizeResults();                                                     // FINALIZE
+		}
+	};
+
+	setTimeout(processChunk, 0);
 }

@@ -44,13 +44,13 @@ File names and descriptions:
 The following columns represent information about the person in a row. Some columns may be blank. There are also the group of finding aides found in all datasets.
 1. line - A unique identifier for the row.
 2. family - A number used by the enumerator to identify a unique family, in order of visitation.
-3. full_name - The combination of the first_name, the middle_name, and the last_name separated by spaces. If there are only two words, the first is last_name and and the second is the last_name. If there is only one word, it is only the last_name.
-4. first_name - The given name.
-5. middle_name - The middle name or initials.
-6. last_name - The surname.
-7. first-name - The given name.
-8. age - The age of the person in 1870.
-9. birth_year - The year the person was born. May be inaccurate +/- 5 years.
+3. full_name - The combination of the first_name, the middle_name, and the last_name separated by spaces. If there are only two words, the first is last_name and and the second is the   	last_name. If there is only one word, it is only the last_name.
+4.  first_name - The given name.
+5.  middle_name - The middle name or initials.
+6.  last_name - The surname.
+7.  first-name - The given name.
+8.  age - The age of the person in 1870.
+9.  birth_year - The year the person was born. May be inaccurate +/- 5 years.
 10. gender - The sex of the person. Can be F for female or M for male.
 11. race - The race of the person. Can be B for Black, W for White, M for Mulatto, C for Chinese, and I for Indian.
 12. relation - The relationship between the person and the head of household, whose relationship is labeled Self.
@@ -63,14 +63,11 @@ The following columns represent information about the person in a row. Some colu
 I have these finding aides are additional columns added to primary source datasets that synthesize data from other columns to make matching easier. These fields are appended as columns in a primary source datasets where applicable.
 Results are always in uppercase. NYSIIS is a soundex-like encoding algorithm, used to roughly compare names. 
 
-* date_10 - year rounded down by +/- 5 years
-* birth_date_10 - rounded
 * norm_first_name - Abbreviation and nicknames expanded to full name
 * nysiis_last_name - NYSIIS encoded last-name
-* nysiis_first_name - NYSIIS encoded first-name
 * norm_occupation - Occupations clustered to 21 meta-categories.
 
-There is a third file called ALB_VER.csv which is a list of all the names in the 1870 census that were verified to be correct. The egoid the unique identifier for each person verified. Load this file as well. After it has been loaded set the variable name "nextEgoId" to the next egoid in the file.
+There is a third file called ALB_VER.csv which is a list of all the names in the 1870 census that were verified to be correct. The egoid the unique identifier for each person verified. Load this file as well.
 
 APP IMPLEMENTATION:
 
@@ -80,17 +77,19 @@ Do not use node.js
 Load the files automatically on page load.
 Add a button to start the matching process {
 	- For each person in the first dataset, find the best match in the second dataset using the method described in @BlockMatchSkill.md.
-	Add 3 tabs, one for each tier of the matching strategy.
-	Here are the thresholds for each tier {
+	- Add 3 tabs, one for each tier of the matching strategy.
+	- Here are the thresholds for each tier {
 		- Tier 1 only includes matches that have a score above 90.
 		- Tier 2 only includes matches that have a score between 80 and 89.
 		- Tier 3 only includes matches that have a score between 60 and 79.
 		}
-	-List all the matches within the tier's thresholds in the appropriate tab
+	- List all the matches within the tier's thresholds in the appropriate tab
 	- Limit those included in the preview tabs to the thresholds set.
 	Show waiting icon while rendering preview.
 	}
-	- Add a checkbox on the right side of the line with the save button to tell the matching algorithm to implement household context boosting. If checked, the matching algorithm will implement household context boosting.
+- Add a checkbox on the right side of the line with the save button to tell the matching algorithm to implement household context boosting. If checked, the matching algorithm will implement household context boosting.
+
+- when method pulldown selects a new option, click on the start button.
 
 Matched Pairs Panel {
 	if method == "match" or method == "find-duplicates" {
@@ -127,7 +126,7 @@ Census Context Panel {
 		}
 	}
 
-Add a button to save a csv file {
+Add a button to save to clipboard {
 	When clicked {
 		- if matching {
 					- ask for cutoff score
@@ -138,7 +137,6 @@ Add a button to save a csv file {
 							}
 						}
 				copy the egoid column from the 1880 list to clipboard.
-				don't save to file.	
 				}
 			- else if finding duplicates {
 				- for each result in the Tier 1, 2, or 3 section of the matched pairs section {
@@ -148,12 +146,72 @@ Add a button to save a csv file {
 						- theScore - The score of the match.
 						}
 					}
+				- Make two columns: theLine, theChange:
+				- theLine is the line number from the census.
+				- theChange is the change to be made to the census.
+				- for each change to be made to the census
+					- add a row to the columns with the line number and the change to be made to the census.
 				}
 			- else if relations {
-				-don't score candidates in relations.
-				}
-		}
-		- Use the @SaveChanges.md skill to save the changes.
+				- don't score candidates in relations.
+				- for each candidate {
+					- head = candidate.head.egoid.
+					- rel = candidate.relation.egoid.
+					- if (candidate.details.includes("spouse")) {
+						- in the verData array {
+							- set the spouses field in the row where egoid = head to rel.
+							- set the spouses field in the row where egoid = rel to head.
+							}
+						}
+					- if (candidate.details.includes("child")) {
+							- in the verData array {
+								- wife = candidate.spouses.egoid.
+								- add to the children field in the row where egoid = head to rel, followed by a commma and a space.
+								- add to the children field in the row where egoid = wife to rel, followed by a commma and a space.
+								- set the mother field in the row where egoid = rel to head.	
+								- set the father field in the row where egoid = rel to wife.	
+								}
+						}
+					- if (candidate.details.includes("sibling")) {
+							- in the verData array {
+								- add "SIB-" + head to the siblings field in the row where egoid = rel to head, followed by a commma and a space.
+								- add to the siblings field in the row where egoid = rel followed by a commma and a space.
+								}
+						}
+					- if (candidate.details.includes("child")) {
+							- in the verData array {
+								- wife = candidate.spouses.egoid.
+								- add to the children field in the row where egoid = head to rel, followed by a commma and a space.
+								- add to the children field in the row where egoid = wife to rel, followed by a commma and a space.
+								- set the mother field in the row where egoid = rel to head.	
+								- set the father field in the row where egoid = rel to wife.	
+								}
+						}
+					- if (candidate.details.includes("grand")) {
+							- in the verData array {
+								- wife = candidate.spouses.egoid.
+								- add to the grandchildren field in the row where egoid = head to rel, followed by a commma and a space.
+								- add to the grandchildren field in the row where egoid = wife to rel, followed by a commma and a space.
+								}
+						}
+					- if (candidate.details.includes("brother-in-law")) {
+							- in the verData array {
+								- add to the siblings field in the row where egoid = rel to head, followed by a commma and a space.
+								}
+						}
+
+					- when done with all candidates {
+							for each row in verData {
+								- if the siblings field in the row contains "SIB-" {
+									- remove "SIB-" from the siblings field.
+									- get the value of the siblings field in that row.
+									- add that to the siblings field in the orginal row
+									}
+							}
+						}
+					- copy the maiden_name, spouses, mother, father, siblings, children, and grandchildren columns from the verData array to clipboard.
+					}
+			}
 	}
 
 	Add search box at top of matched pairs section to scroll to found string in any pair: {
@@ -193,10 +251,6 @@ Add a button to save a csv file {
 		Show interface to load CSV file.
 		When CSV file is loaded put data in 1880 
 		}		
-
-		
-
-
 		
 Show detailed steps of progress when matching in browser console only. 
 Use a light UI theme.

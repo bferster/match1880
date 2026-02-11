@@ -20,7 +20,30 @@ For each head of household in the 1880 dataset {
 		list1880 contains the household members in the 1880 dataset.
 		}
 
-	whenever you find a match, add it to the list of matches, when showing matched pairs.
+	use this first-name-match strategy to match each 1870 household member to 1880 head of household {
+		- relation is household member in 1870 census to match with head of household in 1880.
+		- make a members list of 1870 household members with the same head of household in 1880.
+		- for each member in list {
+			- set member.score = 0
+			- score by first name similarity {
+				- If relation.first_name = member.first_name then add member.score +100 points. 
+				- else if jaroWinkler score of relation.first_name and member.first_name is > .85 then +80.
+				- else if relation.norm_first_name = member.norm_first_name then +60.
+				- else if jaroWinkler score of relation.first_name and member.first_name is > .7 then +40.
+				}
+			- score by birth year similarity {
+				- if relation.birth_year = member.birth_year then +100.
+				- else relation.birth_year  member.birth_year are +/- 2 years  apart `then +80.
+				- else relation.birth_year  member.birth_year are +/- 5 years then +40.
+				}
+			}
+		- find member with highest score {
+			- if score if above 60, return the member.
+			- else return null.
+			}
+	}
+	- show progress bar while finding relations.
+	- whenever you find a relation match, using the first-name-match strategy, add it to the list of matches, when showing matched pairs.
 		
 	for each member of list1880  {
 		if list1880’s member’s relation is “wife”  {
@@ -59,7 +82,7 @@ For each head of household in the 1880 dataset {
 				}
 			add egoMaiden to maiden field in row with egoid = egoWife.
 			}
-		if list1880’s relation field is “sister -in-law” {
+		if list1880’s relation field is “sister-in-law” {
 			find matching name in list1870 {
 				skip if not found
 				skip if last_name is the same as last_name in egoHead row.

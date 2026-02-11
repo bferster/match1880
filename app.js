@@ -113,7 +113,7 @@ const App = {
 				$('#ctx-head-btm').text('1870 Record B (±12 Rows)');
 			} else if (this.mode === 'relations') {
 				$('#ctx-head-top').text('Relation Details');
-				$('#ctx-head-btm').text('1880 Record');
+				$('#ctx-head-btm').text('1880 Head of Household');
 			} else {
 				$('#ctx-head-top').text('1870 Census Context (±12 Rows)');
 				$('#ctx-head-btm').text('1880 Census Context (±12 Rows)');
@@ -142,6 +142,8 @@ const App = {
 
 		$('#file-1870').on('change', (e) => this.loadLocalFile(e, 1870));          // LOAD 1870
 		$('#file-1880').on('change', (e) => this.loadLocalFile(e, 1880));          // LOAD 1880
+
+		$('#sel-mode').on('change', () => $('#btn-run').trigger('click'));         // AUTO RUN ON MODE CHANGE
 
 		$(document).on('click', '.match-item', (e) => {                            // HANDLER: MATCH CLICK
 			// Visual feedback
@@ -632,9 +634,8 @@ const App = {
 			} else {
 				let html = '';
 
-				if (this.mode === 'relations') {
-					console.log(data);
-					// SPECIAL RENDERER FOR RELATIONS
+				if (this.mode === 'relations') {															// SPECIAL RENDERER FOR RELATIONS
+
 
 					data.forEach(m => {
 						// m.head = 1880 Head Record
@@ -645,7 +646,7 @@ const App = {
 						const rRel = m.relation || m.rRelation;
 
 						if (!rHead) return; // Should not happen
-						if (rRel.egoid === rHead.egoid) return;					// PROMPT: "for each relation that is not match to itself"
+						// Filter removed to maintain index sync with data. Self-matches filtered at generation.
 
 
 						let cls = 'score-high'; // Relations are usually high confidence by definition of the algo
@@ -786,21 +787,19 @@ const App = {
 		this.log("Exporting Results...");
 
 		if (this.mode === 'dedup') {
-			// DEDUP MODE: theLine, theDupe, theScore (ALL TIERS)
+			// DEDUP MODE: theLine, theChange
 			const changes = [];
 			const allTiers = [...this.tier1, ...this.tier2, ...this.tier3];
 
 			allTiers.forEach(m => {
 				changes.push({
 					theLine: m.r70.line,
-					theDupe: m.r80.line,
-					theScore: m.score
+					theChange: `Duplicate of Line ${m.r80.line} (Score: ${m.score})`
 				});
 			});
-			this.log(`Exporting ${changes.length} duplicate pairs (All Tiers).`);
 
 			if (changes.length === 0) {
-				alert("No matches found to export.");
+				alert("No matches found.");
 				return;
 			}
 
@@ -810,69 +809,258 @@ const App = {
 			const url = URL.createObjectURL(blob);
 			link.setAttribute("href", url);
 			link.setAttribute("download", "duplicates.csv");
-			link.style.visibility = 'hidden';
 			document.body.appendChild(link);
 			link.click();
 			document.body.removeChild(link);
 
-		} else {
+		} else if (this.mode === 'match') {
 			// MATCH MODE: Update 1880 egoid column & Copy to Clipboard
 			const cutoffStr = prompt("Enter cutoff score (e.g. 90):", "90");
-			if (cutoffStr === null) return;                                        // Cancelled
+			if (cutoffStr === null) return;
 			const cutoff = parseInt(cutoffStr, 10) || 90;
 
 			this.log(`Applying cutoff ${cutoff} to matches...`);
 
-			// 1. Build Index of Matches meeting cutoff
-			// Map: Line 1880 -> Egoid 1870
-			const matches80 = new Map();
+			// 1. Clear 1880 egoid column 
+			const newEgoids = new Map(); // Map<Line1880, NewValue>
+
+			// 2. Process Matches
 			const allTiers = [...this.tier1, ...this.tier2, ...this.tier3];
 
 			let matchCount = 0;
 			allTiers.forEach(m => {
 				if (m.score >= cutoff) {
-					// Check if r70 has egoid
 					if (m.r70.egoid) {
-						// Store the 1870 egoid mapped to the 1880 line with "1e" prefix
-						matches80.set(String(m.r80.line), '1e' + m.r70.egoid);
+						// "add the 1e+egoid of the 1870 row to the egoid column of the 1880 row"
+						const val = '1e' + m.r70.egoid;
+						newEgoids.set(String(m.r80.line), val);
 						matchCount++;
 					}
 				}
 			});
 
-			this.log(`Found ${matchCount} matches above score ${cutoff} with valid source IDs.`);
+			this.log(`Updated ${matchCount} 1880 records with 1870 IDs.`);
 
-			// 2. Update 1880 Dataset & Collect EgoIDs
-			// First, clear ALL egoid values in 1880 dataset as requested
-			this.data1880.forEach(r => r.egoid = '');
+			// 3. Copy 1880 egoid column to clipboard
+			const rows = [];
 
-			// We iterate the original 1880 list to preserve order
-			const egoIdParams = [];
-
-			this.data1880.forEach(r80 => {
-				const lineKey = String(r80.line);
-				if (matches80.has(lineKey)) {
-					// Update the record in memory (optional, but requested "add the egoid... to the row")
-					r80.egoid = matches80.get(lineKey);
-				}
-				// Collect for clipboard - ensure string
-				egoIdParams.push(r80.egoid || "");
+			this.data1880.forEach(r => {
+				const keys = String(r.line);
+				const val = newEgoids.get(keys) || '';
+				rows.push(val);
 			});
 
-			// 3. Copy to Clipboard
-			const clipboardText = egoIdParams.join('\n');
+			const clipboardText = rows.join('\n');
 
-			// Try navigator first
 			if (navigator.clipboard && navigator.clipboard.writeText) {
 				navigator.clipboard.writeText(clipboardText).then(() => {
-					alert(`Success! Copied ${egoIdParams.length} rows (Column: egoid) to clipboard.\nMatches applied: ${matchCount}`);
-				}).catch(err => {
-					console.error("Clipboard write failed", err);
-					this.fallbackCopy(clipboardText, egoIdParams.length);
-				});
+					alert(`Match Mode: Copied 1880 egoid column (${rows.length} rows) to clipboard.\nMatches applied: ${matchCount}`);
+				}).catch(e => this.fallbackCopy(clipboardText, rows.length));
 			} else {
-				this.fallbackCopy(clipboardText, egoIdParams.length);
+				this.fallbackCopy(clipboardText, rows.length);
 			}
+
+		} else if (this.mode === 'relations') {
+			// RELATIONS MODE: Async Update with Progress Bar
+			const allTiers = [...this.tier1, ...this.tier2, ...this.tier3];
+			const total = allTiers.length;
+			let updateCount = 0;
+			let processed = 0;
+			const CHUNK = 50;
+
+			this.log("Starting Relations Export...");
+			this.progress(0, "Updating VerData...");
+
+			const processRelationsChunk = () => {
+				const limit = Math.min(processed + CHUNK, total);
+
+				for (let i = processed; i < limit; i++) {
+					const c = allTiers[i];
+					const details = (c.details || '');
+
+					if (details.includes('Spouse')) {
+						const headID = c.head.egoid;
+						const wifeID = c.relation.egoid; // In relations.js, relation IS the 'wife' match
+						if (headID && wifeID) {
+							const headRec = this.verData.find(r => r.egoid == headID);
+							const wifeRec = this.verData.find(r => r.egoid == wifeID);
+							if (headRec) { headRec.spouses = wifeID; updateCount++; }
+							if (wifeRec) { wifeRec.spouses = headID; updateCount++; }
+						}
+
+					} else if (details.includes('Child') && !details.includes('Grand')) {
+						const headID = c.head.egoid;
+						const relID = c.relation.egoid;
+						const headRec = this.verData.find(r => r.egoid == headID);
+						const relRec = this.verData.find(r => r.egoid == relID);
+
+						if (headRec && relRec) {
+							const wifeID = headRec.spouses;
+
+							// Head -> Child
+							let hKids = (headRec.children || '').trim();
+							if (hKids && !hKids.endsWith(',') && hKids.length > 0) hKids += ', ';
+							headRec.children = hKids + relID;
+
+							// Wife -> Child
+							if (wifeID) {
+								const wifeRec = this.verData.find(r => r.egoid == wifeID);
+								if (wifeRec) {
+									let wKids = (wifeRec.children || '').trim();
+									if (wKids && !wKids.endsWith(',') && wKids.length > 0) wKids += ', ';
+									wifeRec.children = wKids + relID;
+								}
+							}
+
+							// Child -> Parents
+							relRec.mother = headID;
+							if (wifeID) relRec.father = wifeID;
+							updateCount++;
+						}
+
+					} else if (details.includes('Sibling') || details.includes('brother-in-law')) {
+						const headID = c.head.egoid;
+						const relID = c.relation.egoid;
+
+						const headRec = this.verData.find(r => r.egoid == headID);
+						const relRec = this.verData.find(r => r.egoid == relID);
+
+						if (headRec && relRec) {
+							// 1. Update REL's siblings (Add HeadID)
+							let rSibs = (relRec.siblings || '').trim();
+							if (rSibs && !rSibs.endsWith(',') && rSibs.length > 0) rSibs += ', ';
+							relRec.siblings = rSibs + "SIB-" + headID;
+
+							if (details.includes('Sibling')) {
+								let hSibs = (headRec.siblings || '').trim();
+								if (hSibs && !hSibs.endsWith(',') && hSibs.length > 0) hSibs += ', ';
+								headRec.siblings = hSibs + relID;
+							}
+
+							updateCount++;
+						}
+
+					} else if (details.includes('Grandchild') || details.includes('grand')) {
+						const headID = c.head.egoid;
+						const relID = c.relation.egoid;
+						const headRec = this.verData.find(r => r.egoid == headID);
+						const relRec = this.verData.find(r => r.egoid == relID);
+
+						if (headRec && relRec) {
+							const wifeID = headRec.spouses;
+
+							// Head -> Grandchild
+							let hGrand = (headRec.grandchildren || '').trim();
+							if (hGrand && !hGrand.endsWith(',') && hGrand.length > 0) hGrand += ', ';
+							headRec.grandchildren = hGrand + relID;
+
+							// Wife -> Grandchild
+							if (wifeID) {
+								const wifeRec = this.verData.find(r => r.egoid == wifeID);
+								if (wifeRec) {
+									let wGrand = (wifeRec.grandchildren || '').trim();
+									if (wGrand && !wGrand.endsWith(',') && wGrand.length > 0) wGrand += ', ';
+									wifeRec.grandchildren = wGrand + relID;
+								}
+							}
+
+							// Rel (Grandchild) -> Grandparents (stored in grandchildren field per legacy prompt instructions)
+							let rGrand = (relRec.grandchildren || '').trim();
+							if (rGrand && !rGrand.endsWith(',') && rGrand.length > 0) rGrand += ', ';
+							rGrand += headID + (wifeID ? ', ' + wifeID : '');
+							relRec.grandchildren = rGrand;
+
+							updateCount++;
+						}
+					}
+				} // End Chunk Loop
+
+				processed = limit;
+				const pct = Math.round((processed / total) * 100);
+				this.progress(pct, `Updating Relations (${processed}/${total})`);
+
+				if (processed < total) {
+					setTimeout(processRelationsChunk, 0);
+				} else {
+					this.finishRelationsExport(updateCount);
+				}
+			};
+
+			processRelationsChunk(); // Start Async
+		}
+	},
+
+	finishRelationsExport: function (updateCount) {
+		this.progress(100, "Processing Sibling Inheritance...");
+
+		// SIB- Inheritance Logic
+		let sibUpdateCount = 0;
+		this.verData.forEach(row => {
+			if (row.siblings && row.siblings.includes('SIB-')) {
+				let currentSibs = row.siblings.split(',').map(s => s.trim()).filter(s => s);
+				let newSibs = new Set();
+				let changed = false;
+
+				currentSibs.forEach(sib => {
+					if (sib.startsWith('SIB-')) {
+						const cleanID = sib.replace('SIB-', '');
+						newSibs.add(cleanID); // Add the ID itself (stripped of prefix)
+
+						// Inherit siblings from the referenced ID
+						const targetRec = this.verData.find(r => r.egoid == cleanID);
+						if (targetRec && targetRec.siblings) {
+							const targetSibs = targetRec.siblings.split(',').map(s => s.trim()).filter(s => s);
+							targetSibs.forEach(ts => {
+								if (!ts.startsWith('SIB-')) { // Avoid chaining SIB- markers if logical
+									newSibs.add(ts);
+								}
+							});
+						}
+						changed = true;
+					} else {
+						newSibs.add(sib);
+					}
+				});
+
+				if (changed) {
+					// Remove self-reference if present
+					if (row.egoid) newSibs.delete(String(row.egoid));
+
+					row.siblings = Array.from(newSibs).join(', ');
+					sibUpdateCount++;
+				}
+			}
+		});
+
+		this.log(`Sibling processing complete. Updated ${sibUpdateCount} records.`);
+		this.progress(100, "Copying to Clipboard...");
+
+		const headers = ['maiden_name', 'spouses', 'mother', 'father', 'siblings', 'children', 'grandchildren'];
+		const rows = [];
+
+		this.verData.forEach(r => {
+			const row = headers.map(h => r[h] || '').join('\t');
+			rows.push(row);
+		});
+
+		const clipboardText = headers.join('\t') + '\n' + rows.join('\n');
+
+		// Helper to finalize
+		const finish = () => {
+			this.log(`Relations Mode: Updated ${updateCount} records locally (plus ${sibUpdateCount} sibling expansions).`);
+			alert(`Relations Mode: Copied ${rows.length} rows to clipboard.\nUpdates Applied: ${updateCount}\nSibling Expansions: ${sibUpdateCount}`);
+			this.progress(0, "Idle");
+		};
+
+		if (navigator.clipboard && navigator.clipboard.writeText) {
+			navigator.clipboard.writeText(clipboardText).then(finish).catch(err => {
+				console.error("Clipboard failed", err);
+				this.fallbackCopy(clipboardText, rows.length);
+				this.progress(0, "Idle");
+			});
+		} else {
+			this.fallbackCopy(clipboardText, rows.length);
+			this.progress(0, "Idle");
 		}
 	},
 
@@ -926,12 +1114,11 @@ const App = {
 				start = 0;
 			} else {
 				return;
-			}
+			} ``
 		}
 
 		for (let i = start; i < data.length; i++) {
 			const item = data[i];
-			console.log(item);
 			// Search in full match result (data object)
 			// usage of JSON.stringify to catch all field values
 			const content = JSON.stringify(item).toLowerCase();
