@@ -41,7 +41,8 @@ For each head of household in the 1880 dataset {
 			- if score if above 60, return the member.
 			- else return null.
 			}
-	}
+		}
+
 	- show progress bar while finding relations.
 	- whenever you find a relation match, using the first-name-match strategy, add it to the list of matches, when showing matched pairs.
 		
@@ -57,15 +58,22 @@ For each head of household in the 1880 dataset {
 		}
 
 	for each member of the list1880  {
-		if list1880’s relation is “daughter” or “son” or “step-son” or “step-daughter”   {
-			find matching name in list1870 list {
+		if list1880’s member’s relation is "mother"  {
+			find matching name in list1870 list  {
 				skip if not found.
-				set egoChild = egoid of child found in list1870.
+				set egoMother = egoid of mother found in list1870.
 				}
-			add egoChild to children field in row with egoid = egoHead	.
-			add egoChild to children field in row with egoid = egoWife.
-			add egoChild to siblings field in row with egoid = egoChild.
+			add egoMother to mother field in row where egoid = egoHead.
+			add egoHead to children field in row where egoid = egoMother.
 			}
+		if list1880’s member’s relation is "father"  {
+			find matching name in list1870 list  {
+				skip if not found.
+				set egoFather = egoid of father found in list1870.
+				}
+			add egoFather to father field in row where egoid = egoHead.
+			add egoHead to children field in row where egoid = egoFather.
+			}	
 		if list1880’s relation is “brother” or “sister” {
 			find matching name in list1870  {
 				skip if not found
@@ -74,26 +82,49 @@ For each head of household in the 1880 dataset {
 			add egoSibling to siblings field in row with egoid = egoHead.
 			add egoHead to siblings field in row with egoid = egoSibling.
 			}
-		if list1880’s relation is “brother-in-law” or “father_in_law” or “mother_in_ law” {
-			find matching name in list1870  {
-				skip if not found
-				skip if the last_name of in-law in list1870 is the same as the last_name in the egoHead row.
-				set egoMaiden = last_name of in-law in list1870.
+		if list1880’s member’s relation is "cousin"  {
+			handle cousins in the same way as siblings.
+			except {
+				use "COU-" instead of "SIB-" in first pass to flag them. 
+				add them to the cousins field instead of siblings in row where egoid = egoHead.
+				}			
+			}	
+		if list1880’s relation is “wife” set egoWife = egoid of wife found in list1870.
+			find matching name in list1870 list {
+				- skip if not found.
+				- set egoChild = egoid of child found in list1870.
 				}
-			add egoMaiden to maiden field in row with egoid = egoWife.
+			add egoChild to children field in row with egoid = egoHead.
+			add egoChild to children field in row with egoid = egoWife.
+			add egoChild to siblings field in row with egoid = egoChild.
 			}
-		if list1880’s relation field is “sister-in-law” {
-			find matching name in list1870 {
+		- if list1880’s relation is niece or “nephew” {
+			- find matching name in list1870  {
 				skip if not found
-				skip if last_name is the same as last_name in egoHead row.
+				set egoNibling = egoid of nibling list1870
 				}
-			if list1880’s marital_status is "S" {
-				set egoMaiden = last_name of in-law
-				add egoMaiden to maiden field in row with egoid = egoWife.
+			- add egoNibling to niblings field in row with egoid = egoHead.
+			- add egoHead to niblings field in row with egoid = egoNibling.
+			}
+		- if list1880’s relation is “brother-in-law” or “father_in_law” or “mother_in_ law” {
+			- find matching name in list1870  {
+				- skip if not found
+				- skip if the last_name of in-law in list1870 is the same as the last_name in the egoHead row.
+				- set egoMaiden = last_name of in-law in list1870.
+				}
+			- add egoMaiden to maiden field in row with egoid = egoWife.
+			}
+		- if list1880’s relation field is “sister-in-law” {
+			- find matching name in list1870 {
+				- skip if not found
+				- skip if last_name is the same as last_name in egoHead row.
+				}
+			- if list1880’s marital_status is "S" {
+				- set egoMaiden = last_name of in-law
+				- add egoMaiden to maiden field in row with egoid = egoWife.
 				}
 	    	}  
-		}
 	}
-
+	
 Remove egoids that match main egoid in row.
 

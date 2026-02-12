@@ -60,27 +60,15 @@ const App = {
 		this.log("Loading datasets in background...");
 
 		Promise.all([
-			this.fetchCSV('ALB_CN_1870.csv'),
-			this.fetchCSV('ALB_CN_1880.csv'),
-			this.fetchCSV('ALB_VER.csv')
+			this.fetchCSV('https://docs.google.com/spreadsheets/d/1nHTwsLdFYJz6gQBNBhbKr41Q_97YaBtGDMklGXiFbMI/export?format=csv'),
+			this.fetchCSV('https://docs.google.com/spreadsheets/d/1K9DA3aoXkU_Yicts8Umtr92N9Hug3cdeTHcUN1gDf4E/export?format=csv'),
+			this.fetchCSV('https://docs.google.com/spreadsheets/d/1F1v6NVQ_McESktbHSlH4MsWsUHG0QtMpMRsI_3wAleA/export?format=csv')
 		]).then(results => {
 			this.data1870 = results[0];
 			this.data1880 = results[1];
-			this.verData = results[2];                                             // STORE VERIFIED DATA
-
-			// Calculate nextEgoId
-			let maxId = 0;
-			if (this.verData && this.verData.length > 0) {
-				this.verData.forEach(row => {
-					const id = parseInt(row.egoid);
-					if (!isNaN(id) && id > maxId) maxId = id;
-				});
-			}
-			this.nextEgoId = maxId + 1;
-			this.log(`Loaded Verified Data. Next Ego ID: ${this.nextEgoId}`);
+			this.dataVerified = results[2];                                        // STORE VERIFIED DATA
 
 			// Build Index Maps
-			// Ensure line is string for consistency as CSV parsing might vary
 			this.data1870.forEach((r, i) => this.map1870.set(String(r.line), i));
 			this.data1880.forEach((r, i) => this.map1880.set(String(r.line), i));
 
@@ -831,8 +819,8 @@ const App = {
 			allTiers.forEach(m => {
 				if (m.score >= cutoff) {
 					if (m.r70.egoid) {
-						// "add the 1e+egoid of the 1870 row to the egoid column of the 1880 row"
-						const val = '1e' + m.r70.egoid;
+						// "add the egoid of the 1870 row to the egoid column of the 1880 row"
+						const val = m.r70.egoid;
 						newEgoids.set(String(m.r80.line), val);
 						matchCount++;
 					}
@@ -864,125 +852,184 @@ const App = {
 			// RELATIONS MODE: Async Update with Progress Bar
 			const allTiers = [...this.tier1, ...this.tier2, ...this.tier3];
 			const total = allTiers.length;
+
+			this.log("Starting Relations Export...");
+			this.progress(0, "Updating Verified Data (Pass 1: Spouses)...");
+
+			// PASS 1: SPOUSES ONLY
+			// "set spouses first"
+			let spouseUpdateCount = 0;
+			allTiers.forEach(c => {
+				const details = (c.details || '').toLowerCase();
+				if (details.includes('spouse')) {
+					const headID = c.head.egoid;
+					const relID = c.relation.egoid;
+
+					const headRec = this.dataVerified.find(r => r.egoid == headID);
+					const relRec = this.dataVerified.find(r => r.egoid == relID);
+
+					if (headRec && relRec) {
+						// "set the spouses field in the row where egoid = head to rel."
+						headRec.spouses = relID;
+						// "set the spouses field in the row where egoid = rel to head."
+						relRec.spouses = headID;
+						spouseUpdateCount++;
+					}
+				}
+			});
+
+			this.log(`Pass 1 Complete: ${spouseUpdateCount} spouse links created.`);
+			this.progress(10, "Updating Verified Data (Pass 2: Relations)...");
+
+			// PASS 2: OTHER RELATIONS - Async Chunking
 			let updateCount = 0;
 			let processed = 0;
 			const CHUNK = 50;
-
-			this.log("Starting Relations Export...");
-			this.progress(0, "Updating VerData...");
 
 			const processRelationsChunk = () => {
 				const limit = Math.min(processed + CHUNK, total);
 
 				for (let i = processed; i < limit; i++) {
 					const c = allTiers[i];
-					const details = (c.details || '');
+					const details = (c.details || '').toLowerCase();
 
-					if (details.includes('Spouse')) {
-						const headID = c.head.egoid;
-						const wifeID = c.relation.egoid; // In relations.js, relation IS the 'wife' match
-						if (headID && wifeID) {
-							const headRec = this.verData.find(r => r.egoid == headID);
-							const wifeRec = this.verData.find(r => r.egoid == wifeID);
-							if (headRec) { headRec.spouses = wifeID; updateCount++; }
-							if (wifeRec) { wifeRec.spouses = headID; updateCount++; }
-						}
+					// Skip processing spouses calling logic again, already done
+					if (details.includes('spouse')) continue;
 
-					} else if (details.includes('Child') && !details.includes('Grand')) {
-						const headID = c.head.egoid;
-						const relID = c.relation.egoid;
-						const headRec = this.verData.find(r => r.egoid == headID);
-						const relRec = this.verData.find(r => r.egoid == relID);
+					const headID = c.head.egoid;
+					const relID = c.relation.egoid;
+					const headRec = this.dataVerified.find(r => r.egoid == headID);
+					const relRec = this.dataVerified.find(r => r.egoid == relID);
 
-						if (headRec && relRec) {
-							const wifeID = headRec.spouses;
+					if (!headRec || !relRec) continue;
 
-							// Head -> Child
-							let hKids = (headRec.children || '').trim();
-							if (hKids && !hKids.endsWith(',') && hKids.length > 0) hKids += ', ';
-							headRec.children = hKids + relID;
+					// "spouse = candidate.spouses[0].egoid" (lookup from verified data)
+					const spouseID = headRec.spouses ? headRec.spouses.split(',')[0].trim() : null;
 
-							// Wife -> Child
-							if (wifeID) {
-								const wifeRec = this.verData.find(r => r.egoid == wifeID);
-								if (wifeRec) {
-									let wKids = (wifeRec.children || '').trim();
-									if (wKids && !wKids.endsWith(',') && wKids.length > 0) wKids += ', ';
-									wifeRec.children = wKids + relID;
-								}
-							}
-
-							// Child -> Parents
-							relRec.mother = headID;
-							if (wifeID) relRec.father = wifeID;
-							updateCount++;
-						}
-
-					} else if (details.includes('Sibling') || details.includes('brother-in-law')) {
-						const headID = c.head.egoid;
-						const relID = c.relation.egoid;
-
-						const headRec = this.verData.find(r => r.egoid == headID);
-						const relRec = this.verData.find(r => r.egoid == relID);
-
-						if (headRec && relRec) {
-							// 1. Update REL's siblings (Add HeadID)
-							let rSibs = (relRec.siblings || '').trim();
-							if (rSibs && !rSibs.endsWith(',') && rSibs.length > 0) rSibs += ', ';
-							relRec.siblings = rSibs + "SIB-" + headID;
-
-							if (details.includes('Sibling')) {
-								let hSibs = (headRec.siblings || '').trim();
-								if (hSibs && !hSibs.endsWith(',') && hSibs.length > 0) hSibs += ', ';
-								headRec.siblings = hSibs + relID;
-							}
-
-							updateCount++;
-						}
-
-					} else if (details.includes('Grandchild') || details.includes('grand')) {
-						const headID = c.head.egoid;
-						const relID = c.relation.egoid;
-						const headRec = this.verData.find(r => r.egoid == headID);
-						const relRec = this.verData.find(r => r.egoid == relID);
-
-						if (headRec && relRec) {
-							const wifeID = headRec.spouses;
-
-							// Head -> Grandchild
-							let hGrand = (headRec.grandchildren || '').trim();
-							if (hGrand && !hGrand.endsWith(',') && hGrand.length > 0) hGrand += ', ';
-							headRec.grandchildren = hGrand + relID;
-
-							// Wife -> Grandchild
-							if (wifeID) {
-								const wifeRec = this.verData.find(r => r.egoid == wifeID);
-								if (wifeRec) {
-									let wGrand = (wifeRec.grandchildren || '').trim();
-									if (wGrand && !wGrand.endsWith(',') && wGrand.length > 0) wGrand += ', ';
-									wifeRec.grandchildren = wGrand + relID;
-								}
-							}
-
-							// Rel (Grandchild) -> Grandparents (stored in grandchildren field per legacy prompt instructions)
-							let rGrand = (relRec.grandchildren || '').trim();
-							if (rGrand && !rGrand.endsWith(',') && rGrand.length > 0) rGrand += ', ';
-							rGrand += headID + (wifeID ? ', ' + wifeID : '');
-							relRec.grandchildren = rGrand;
-
-							updateCount++;
-						}
+					if (details.includes('mother')) {
+						// "add to the mother field in the row where egoid = rel to head"
+						relRec.mother = headID;
+						updateCount++;
 					}
+
+					if (details.includes('father')) {
+						// "add to the father field in the row where egoid = rel to head"
+						relRec.father = headID;
+						updateCount++;
+					}
+
+					if (details.includes('child') && !details.includes('grand')) {
+						// Child Logic
+
+						// "add CHI- + head to the children field in the row where egoid = rel to head"
+						let rKids = (relRec.children || '').trim();
+						if (rKids && !rKids.endsWith(',') && rKids.length > 0) rKids += ', ';
+						relRec.children = rKids + "CHI-" + headID;
+
+						// CRITICAL: Add to Head's children so CHI- inheritance works for siblings
+						let hKids = (headRec.children || '').trim();
+						if (hKids && !hKids.endsWith(',') && hKids.length > 0) hKids += ', ';
+						headRec.children = hKids + relID;
+
+						// "add to the children field in the row where egoid = spouse to rel"
+						if (spouseID) {
+							const spouseRec = this.dataVerified.find(r => r.egoid == spouseID);
+							if (spouseRec) {
+								let sKids = (spouseRec.children || '').trim();
+								if (sKids && !sKids.endsWith(',') && sKids.length > 0) sKids += ', ';
+								spouseRec.children = sKids + relID;
+
+								// "set the father field in the row where egoid = rel to spouse"
+								relRec.father = spouseID;
+							}
+						}
+
+						// "set the mother field in the row where egoid = rel to head"
+						relRec.mother = headID;
+
+						updateCount++;
+					}
+
+					// Combined Sibling Logic
+					if (details.includes('sibling')) {
+						// "add SIB- + head to the siblings field in the row where egoid = rel to head"
+						let rSibs = (relRec.siblings || '').trim();
+						if (rSibs && !rSibs.endsWith(',') && rSibs.length > 0) rSibs += ', ';
+						relRec.siblings = rSibs + "SIB-" + headID;
+
+						// "add to the siblings field in the row where egoid = rel followed by a commma and a space"
+						// Implies adding Rel to Head (Reciprocity) or potentially adding Head to Rel?
+						// Given SIB-Head is already added to Rel, adding Head to Rel is redundant.
+						// We'll perform reciprocity: Add Rel to Head.
+						let hSibs = (headRec.siblings || '').trim();
+						if (hSibs && !hSibs.endsWith(',') && hSibs.length > 0) hSibs += ', ';
+						headRec.siblings = hSibs + relID;
+
+						updateCount++;
+					}
+
+					if (details.includes('cousin')) {
+						// "add COU- + head to the cousins field in the row where egoid = rel to head"
+						let rCousins = (relRec.cousins || '').trim();
+						if (rCousins && !rCousins.endsWith(',') && rCousins.length > 0) rCousins += ', ';
+						relRec.cousins = rCousins + "COU-" + headID;
+
+						// "add to the cousins field in the row where egoid = rel" (Reciprocity: Head)
+						let hCousins = (headRec.cousins || '').trim();
+						if (hCousins && !hCousins.endsWith(',') && hCousins.length > 0) hCousins += ', ';
+						headRec.cousins = hCousins + relID;
+
+						updateCount++;
+					}
+
+					if (details.includes('nibling')) {
+						// "add to the niblings field in the row where egoid = head to rel"
+						let hNibs = (headRec.niblings || '').trim();
+						if (hNibs && !hNibs.endsWith(',') && hNibs.length > 0) hNibs += ', ';
+						headRec.niblings = hNibs + relID;
+
+						// "add to the niblings field in the row where egoid = spouse to rel"
+						if (spouseID) {
+							const spouseRec = this.dataVerified.find(r => r.egoid == spouseID);
+							if (spouseRec) {
+								let sNibs = (spouseRec.niblings || '').trim();
+								if (sNibs && !sNibs.endsWith(',') && sNibs.length > 0) sNibs += ', ';
+								spouseRec.niblings = sNibs + relID;
+							}
+						}
+						updateCount++;
+					}
+
+					if (details.includes('grand') && (details.includes('child') || details.includes('grand'))) {
+						// "add to the grandchildren field in the row where egoid = head to rel"
+						let hGrand = (headRec.grandchildren || '').trim();
+						if (hGrand && !hGrand.endsWith(',') && hGrand.length > 0) hGrand += ', ';
+						headRec.grandchildren = hGrand + relID;
+
+						// "add to the grandchildren field in the row where egoid = spouse to rel"
+						if (spouseID) {
+							const spouseRec = this.dataVerified.find(r => r.egoid == spouseID);
+							if (spouseRec) {
+								let sGrand = (spouseRec.grandchildren || '').trim();
+								if (sGrand && !sGrand.endsWith(',') && sGrand.length > 0) sGrand += ', ';
+								spouseRec.grandchildren = sGrand + relID;
+							}
+						}
+						updateCount++;
+					}
+
+
+
 				} // End Chunk Loop
 
 				processed = limit;
-				const pct = Math.round((processed / total) * 100);
+				const pct = 10 + Math.round((processed / total) * 90);
 				this.progress(pct, `Updating Relations (${processed}/${total})`);
 
 				if (processed < total) {
 					setTimeout(processRelationsChunk, 0);
 				} else {
-					this.finishRelationsExport(updateCount);
+					this.finishRelationsExport(updateCount + spouseUpdateCount);
 				}
 			};
 
@@ -991,11 +1038,59 @@ const App = {
 	},
 
 	finishRelationsExport: function (updateCount) {
-		this.progress(100, "Processing Sibling Inheritance...");
+		this.progress(100, "Processing Sibling/Cousin Inheritance...");
 
-		// SIB- Inheritance Logic
-		let sibUpdateCount = 0;
-		this.verData.forEach(row => {
+		// "when done with all candidates"
+		let inheritanceCount = 0;
+
+		this.dataVerified.forEach(row => {
+
+			// 1. CHILDREN (CHI-) -> SIBLINGS
+			// "if the children field in the row contains CHI-"
+			if (row.children && row.children.includes('CHI-')) {
+				let currentKids = row.children.split(',').map(s => s.trim()).filter(s => s);
+				let newKids = new Set();
+				let inheritedSibs = new Set();
+				let changed = false;
+
+				currentKids.forEach(kid => {
+					if (kid.startsWith('CHI-')) {
+						// "remove CHI- from the children field"
+						const targetID = kid.replace('CHI-', '');
+
+						// "get the value of the children field in that row [Target Head]"
+						const targetRec = this.dataVerified.find(r => r.egoid == targetID);
+						if (targetRec && targetRec.children) {
+							const targetChildren = targetRec.children.split(',').map(s => s.trim()).filter(s => s);
+							targetChildren.forEach(tc => {
+								if (!tc.startsWith('CHI-')) {
+									// "add that to the siblings field in the orginal row"
+									inheritedSibs.add(tc);
+								}
+							});
+						}
+						changed = true;
+						// Don't add CHI- marker back to children
+					} else {
+						newKids.add(kid);
+					}
+				});
+
+				if (changed) {
+					row.children = Array.from(newKids).join(', ');
+
+					let currentSibs = (row.siblings || '').split(',').map(s => s.trim()).filter(s => s);
+					let finalSibs = new Set(currentSibs);
+					inheritedSibs.forEach(s => finalSibs.add(s));
+
+					if (row.egoid) finalSibs.delete(String(row.egoid)); // Remove self
+					row.siblings = Array.from(finalSibs).join(', ');
+					inheritanceCount++;
+				}
+			}
+
+			// 2. SIBLINGS (SIB-) -> SIBLINGS
+			// "if the siblings field in the row contains SIB-"
 			if (row.siblings && row.siblings.includes('SIB-')) {
 				let currentSibs = row.siblings.split(',').map(s => s.trim()).filter(s => s);
 				let newSibs = new Set();
@@ -1003,19 +1098,24 @@ const App = {
 
 				currentSibs.forEach(sib => {
 					if (sib.startsWith('SIB-')) {
-						const cleanID = sib.replace('SIB-', '');
-						newSibs.add(cleanID); // Add the ID itself (stripped of prefix)
+						// "remove SIB- from the siblings field"
+						const targetID = sib.replace('SIB-', '');
 
-						// Inherit siblings from the referenced ID
-						const targetRec = this.verData.find(r => r.egoid == cleanID);
+						// "get the value of the siblings field in that row"
+						const targetRec = this.dataVerified.find(r => r.egoid == targetID);
 						if (targetRec && targetRec.siblings) {
 							const targetSibs = targetRec.siblings.split(',').map(s => s.trim()).filter(s => s);
 							targetSibs.forEach(ts => {
-								if (!ts.startsWith('SIB-')) { // Avoid chaining SIB- markers if logical
+								if (!ts.startsWith('SIB-')) {
+									// "add that to the siblings field in the original row"
 									newSibs.add(ts);
 								}
 							});
 						}
+						// Also implies adding the TargetID itself? Prompt vague.
+						// "Sibling of X" means X is sibling. Usually yes.
+						newSibs.add(targetID);
+
 						changed = true;
 					} else {
 						newSibs.add(sib);
@@ -1023,22 +1123,59 @@ const App = {
 				});
 
 				if (changed) {
-					// Remove self-reference if present
 					if (row.egoid) newSibs.delete(String(row.egoid));
-
 					row.siblings = Array.from(newSibs).join(', ');
-					sibUpdateCount++;
+					inheritanceCount++;
+				}
+			}
+
+			// 3. COUSINS (COU-) -> COUSINS
+			// "if the cousins field in the row contains COU-"
+			if (row.cousins && row.cousins.includes('COU-')) {
+				let currentCousins = row.cousins.split(',').map(s => s.trim()).filter(s => s);
+				let newCousins = new Set();
+				let changed = false;
+
+				currentCousins.forEach(c => {
+					if (c.startsWith('COU-')) {
+						// "remove COU- from the cousins field"
+						const targetID = c.replace('COU-', '');
+
+						// "get the value of the cousins field in that row"
+						const targetRec = this.dataVerified.find(r => r.egoid == targetID);
+						if (targetRec && targetRec.cousins) {
+							const targetCousins = targetRec.cousins.split(',').map(s => s.trim()).filter(s => s);
+							targetCousins.forEach(tc => {
+								if (!tc.startsWith('COU-')) {
+									// "add that to the cousins field in the orginal row"
+									newCousins.add(tc);
+								}
+							});
+						}
+						// Add target?
+						newCousins.add(targetID);
+
+						changed = true;
+					} else {
+						newCousins.add(c);
+					}
+				});
+
+				if (changed) {
+					if (row.egoid) newCousins.delete(String(row.egoid));
+					row.cousins = Array.from(newCousins).join(', ');
+					inheritanceCount++;
 				}
 			}
 		});
 
-		this.log(`Sibling processing complete. Updated ${sibUpdateCount} records.`);
+		this.log(`Inheritance processing complete. Updated ${inheritanceCount} records.`);
 		this.progress(100, "Copying to Clipboard...");
 
-		const headers = ['maiden_name', 'spouses', 'mother', 'father', 'siblings', 'children', 'grandchildren'];
+		const headers = ['maiden_name', 'spouses', 'mother', 'father', 'uncles', 'aunts', 'grandmother', 'grandfather', 'siblings', 'niblings', 'cousins', 'children', 'grandchildren'];
 		const rows = [];
 
-		this.verData.forEach(r => {
+		this.dataVerified.forEach(r => {
 			const row = headers.map(h => r[h] || '').join('\t');
 			rows.push(row);
 		});
@@ -1047,9 +1184,11 @@ const App = {
 
 		// Helper to finalize
 		const finish = () => {
-			this.log(`Relations Mode: Updated ${updateCount} records locally (plus ${sibUpdateCount} sibling expansions).`);
-			alert(`Relations Mode: Copied ${rows.length} rows to clipboard.\nUpdates Applied: ${updateCount}\nSibling Expansions: ${sibUpdateCount}`);
+			this.log(`Relations Mode: Updated ${updateCount} records locally (plus ${inheritanceCount} inheritance updates).`);
+			console.log(`Relations Mode: Copied ${rows.length} rows to clipboard.\nUpdates Applied: ${updateCount}\nInheritance Updates: ${inheritanceCount}`);
 			this.progress(0, "Idle");
+			// Short Beep (Console Bell equivalent / Log)
+			console.log("\x07");
 		};
 
 		if (navigator.clipboard && navigator.clipboard.writeText) {

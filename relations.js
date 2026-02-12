@@ -113,9 +113,12 @@ export function findRelations(app)                                             /
 				else if (['daughter', 'son', 'step-son', 'step-daughter'].includes(rel)) { type = 'Child'; note = 'Child of Head'; }
 				else if (['grand-daughter', 'grand-son'].includes(rel)) { type = 'Grand-child'; note = 'Grand-child of Head'; }
 				else if (['brother', 'sister'].includes(rel)) { type = 'Sibling'; note = 'Sibling of Head'; }
+				else if (['niece', 'nephew'].includes(rel)) { type = 'Nibling'; note = 'Nibling'; }
 				else if (['mother'].includes(rel)) { type = 'Mother'; note = 'Mother of Head'; }
 				else if (['father'].includes(rel)) { type = 'Father'; note = 'Father of Head'; }
-				else if (['brother-in-law', 'father_in_law', 'mother_in_law', 'brother-in-law'].some(x => rel.includes(x.replace(/_/g, '-')))) {
+				else if (rel.includes('cousin')) { type = 'Cousin'; note = 'Cousin of Head'; }
+				else if (['brother-in-law', 'brother_in_law'].some(x => rel.includes(x))) { type = 'Brother-in-law'; note = 'Via Brother-in-law'; }
+				else if (['father_in_law', 'mother_in_law'].some(x => rel.includes(x.replace(/_/g, '-')))) {
 					type = 'In-Law'; note = `Via ${rel}`;
 					if ((member80.last_name || '') === head80.last_name && type === 'In-Law') type = '';
 				}
