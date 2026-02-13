@@ -8,7 +8,7 @@ export function findRelations(app)                                             /
 	const isNameMatch = (n1, n2) => jaroWinkler(n1, n2) > 0.85;                // HELPER: FUZZY MATCH
 
 	const house1880 = new Map();                                               // MAP: FAMILY ID -> ROWS
-	const house1870 = new Map();                                               // MAP: FAMILY ID -> ROWS
+	const houseVerified = new Map();                                               // MAP: FAMILY ID -> ROWS
 	const heads1880 = [];                                                      // LIST: HEADS OF HOUSEHOLD
 
 	app.data1880.forEach(r => {                                                // LOOP 1880 DATA
@@ -18,14 +18,14 @@ export function findRelations(app)                                             /
 		if (r.head === 'Y') heads1880.push(r);                                 // IF HEAD MARKER
 	});
 
-	app.data1870.forEach(r => {                                                // LOOP 1870 DATA
+	app.dataVerified.forEach(r => {                                                // LOOP Verified DATA
 		const fid = r.family;                             	                   // Get Family ID
-		if (!house1870.has(fid)) house1870.set(fid, []);                       // Init Array
-		house1870.get(fid).push(r);                                            // Add Member
+		if (!houseVerified.has(fid)) houseVerified.set(fid, []);                       // Init Array
+		houseVerified.get(fid).push(r);                                            // Add Member
 	});
 
 	app.log(`Found ${heads1880.length} households in 1880.`);                  // LOG 1880 COUNT
-	app.log(`Found ${house1870.size} households in 1870.`);                    // LOG 1870 COUNT
+	app.log(`Found ${houseVerified.size} households in verified list.`);                    // LOG Verified COUNT
 
 	let relationsFound = 0;                                                    // COUNTER
 
@@ -36,12 +36,12 @@ export function findRelations(app)                                             /
 		let best = null;
 		let maxScore = -1;
 
-		candidates.forEach(member70 => {
+		candidates.forEach(memberVerified => {
 			let score = 0;
 			// Name
-			const n1 = (member70.first_name || '').toLowerCase().trim();
+			const n1 = (memberVerified.first_name || '').toLowerCase().trim();
 			const n2 = (member80.first_name || '').toLowerCase().trim();
-			const nm1 = (member70.norm_first_name || '').toLowerCase().trim();
+			const nm1 = (memberVerified.norm_first_name || '').toLowerCase().trim();
 			const nm2 = (member80.norm_first_name || '').toLowerCase().trim();
 
 			if (n1 === n2 && n1) score += 100;
@@ -50,7 +50,7 @@ export function findRelations(app)                                             /
 			else if (jaroWinkler(n1, n2) > 0.7) score += 40;
 
 			// Age
-			const y1 = parseInt(member70.birth_year) || 0;
+			const y1 = parseInt(memberVerified.birth_year) || 0;
 			const y2 = parseInt(member80.birth_year) || 0;
 			if (y1 && y2) {
 				const diff = Math.abs(y1 - y2);
@@ -61,7 +61,7 @@ export function findRelations(app)                                             /
 
 			if (score > maxScore) {
 				maxScore = score;
-				best = member70;
+				best = memberVerified;
 			}
 		});
 
@@ -74,9 +74,9 @@ export function findRelations(app)                                             /
 		if (rRel.egoid === head80.egoid) return;           					// Skip self-matches
 		app.candidates.push({
 			head: head80,      												// Head of Household Context
-			relation: rRel,    												// The relation found (1870 member)
-			spouses: r80,													// The 1880 member (relation source) - ALIAS for user logic compatibility
-			r70: head80,      												// Compatibility
+			relation: rRel,    												// The relation found (Verified member)
+			spouses: r80,													// The 1880 member (relation source)
+			rVerified: head80,      												// Compatibility
 			r80: rRel,
 			details: `${type} Found`,
 			tier: 1
@@ -97,11 +97,11 @@ export function findRelations(app)                                             /
 			const head80 = heads1880[i];
 			const egoHead = head80.egoid;                                          // Get 1880 Head egoid
 			const list1880 = house1880.get(head80.family) || [];                   // Get 1880 Members
-			const head1870Record = app.data1870.find(r => r.egoid === egoHead);    // Get 1870 Head Record
+			const headVerifiedRecord = app.dataVerified.find(r => r.egoid === egoHead);    // Get Verified Head Record
 
-			if (!head1870Record) continue;                                           // Skip if not found
+			if (!headVerifiedRecord) continue;                                           // Skip if not found
 
-			const list1870 = house1870.get(head1870Record.family) || [];           // Get 1870 Members
+			const listVerified = houseVerified.get(headVerifiedRecord.family) || [];           // Get Verified Members
 
 			// PROCESS MEMBERS
 			list1880.forEach(member80 => {
@@ -127,7 +127,7 @@ export function findRelations(app)                                             /
 				}
 
 				if (type) {
-					const match = findBestMatch(member80, list1870);
+					const match = findBestMatch(member80, listVerified);
 					if (match) {
 						if (type === 'In-Law' || type === 'Sister-in-law') {
 							const inLawName = match.last_name || '';

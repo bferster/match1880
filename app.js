@@ -8,11 +8,10 @@ import { findRelations } from './relations.js';
 ///////////////////////////////////////////////////////////////////////////////
 
 const App = {
-	data1870: [],
+	dataVerified: [],
 	data1880: [],
-	verData: [],
 
-	map1870: new Map(),
+	mapVerified: new Map(),
 	map1880: new Map(),
 
 	nextEgoId: 1,
@@ -60,19 +59,17 @@ const App = {
 		this.log("Loading datasets in background...");
 
 		Promise.all([
-			this.fetchCSV('https://docs.google.com/spreadsheets/d/1nHTwsLdFYJz6gQBNBhbKr41Q_97YaBtGDMklGXiFbMI/export?format=csv'),
-			this.fetchCSV('https://docs.google.com/spreadsheets/d/1K9DA3aoXkU_Yicts8Umtr92N9Hug3cdeTHcUN1gDf4E/export?format=csv'),
-			this.fetchCSV('https://docs.google.com/spreadsheets/d/1F1v6NVQ_McESktbHSlH4MsWsUHG0QtMpMRsI_3wAleA/export?format=csv')
+			this.fetchCSV('https://docs.google.com/spreadsheets/d/1F1v6NVQ_McESktbHSlH4MsWsUHG0QtMpMRsI_3wAleA/export?format=csv'), // Verified
+			this.fetchCSV('https://docs.google.com/spreadsheets/d/1K9DA3aoXkU_Yicts8Umtr92N9Hug3cdeTHcUN1gDf4E/export?format=csv')  // 1880
 		]).then(results => {
-			this.data1870 = results[0];
+			this.dataVerified = results[0];
 			this.data1880 = results[1];
-			this.dataVerified = results[2];                                        // STORE VERIFIED DATA
 
 			// Build Index Maps
-			this.data1870.forEach((r, i) => this.map1870.set(String(r.line), i));
+			this.dataVerified.forEach((r, i) => this.mapVerified.set(String(r.line), i));
 			this.data1880.forEach((r, i) => this.map1880.set(String(r.line), i));
 
-			this.setStatus('st-1870', `Loaded (${this.data1870.length})`, 'ready');
+			this.setStatus('st-verified', `Loaded (${this.dataVerified.length})`, 'ready');
 			this.setStatus('st-1880', `Loaded (${this.data1880.length})`, 'ready');
 			this.log("Data loaded. Ready to start.");
 
@@ -97,13 +94,13 @@ const App = {
 
 			// Update UI Labels based on mode
 			if (this.mode === 'dedup') {
-				$('#ctx-head-top').text('1870 Record A (±12 Rows)');
-				$('#ctx-head-btm').text('1870 Record B (±12 Rows)');
+				$('#ctx-head-top').text('Verified Record A (±12 Rows)');
+				$('#ctx-head-btm').text('Verified Record B (±12 Rows)');
 			} else if (this.mode === 'relations') {
 				$('#ctx-head-top').text('Relation Details');
 				$('#ctx-head-btm').text('1880 Head of Household');
 			} else {
-				$('#ctx-head-top').text('1870 Census Context (±12 Rows)');
+				$('#ctx-head-top').text('Verified Census Context (±12 Rows)');
 				$('#ctx-head-btm').text('1880 Census Context (±12 Rows)');
 			}
 
@@ -125,10 +122,11 @@ const App = {
 
 
 		// Delegation for match item clicks
-		$('#st-1870').on('click', () => $('#file-1870').trigger('click'));         // CLICK 1870
+		// Delegation for match item clicks
+		$('#st-verified').on('click', () => $('#file-verified').trigger('click'));         // CLICK Verified
 		$('#st-1880').on('click', () => $('#file-1880').trigger('click'));         // CLICK 1880
 
-		$('#file-1870').on('change', (e) => this.loadLocalFile(e, 1870));          // LOAD 1870
+		$('#file-verified').on('change', (e) => this.loadLocalFile(e, 'verified'));          // LOAD Verified
 		$('#file-1880').on('change', (e) => this.loadLocalFile(e, 1880));          // LOAD 1880
 
 		$('#sel-mode').on('change', () => $('#btn-run').trigger('click'));         // AUTO RUN ON MODE CHANGE
@@ -139,45 +137,45 @@ const App = {
 			$(e.currentTarget).css('background-color', '#eff6ff');
 
 			// Get original lines
-			const l70 = parseInt($(e.currentTarget).data('l70'));
+			const lVer = parseInt($(e.currentTarget).data('lver'));
 			const l80 = parseInt($(e.currentTarget).data('l80'));
 
 			// No shift as requested
-			const l70_shift = l70;
+			const lVer_shift = lVer;
 			const l80_shift = l80;
 
 			// Log to console 
-			console.log(`[Context] 1870 Match Line: ${l70}`);
+			console.log(`[Context] Verified Match Line: ${lVer}`);
 			console.log(`[Context] 1880 Match Line: ${l80}`);
 
-			this.showContext(l70_shift, l80_shift);
+			this.showContext(lVer_shift, l80_shift);
 		});
 	},
 
-	loadLocalFile: function (e, year)                                              // LOAD LOCAL FILE
+	loadLocalFile: function (e, type)                                              // LOAD LOCAL FILE
 	{
 		const file = e.target.files[0];
 		if (!file) return;
 
-		this.setStatus(`st-${year}`, "Parsing...", "score-med");
+		this.setStatus(`st-${type}`, "Parsing...", "score-med");
 
 		Papa.parse(file, {
 			header: true,
 			skipEmptyLines: true,
 			complete: (results) => {
 				const data = results.data;
-				if (year === 1870) {
-					this.data1870 = data;
-					this.map1870 = new Map();
-					this.data1870.forEach((r, i) => this.map1870.set(String(r.line), i));
+				if (type === 'verified') {
+					this.dataVerified = data;
+					this.mapVerified = new Map();
+					this.dataVerified.forEach((r, i) => this.mapVerified.set(String(r.line), i));
 				} else {
 					this.data1880 = data;
 					this.map1880 = new Map();
 					this.data1880.forEach((r, i) => this.map1880.set(String(r.line), i));
 				}
 
-				this.setStatus(`st-${year}`, `Loaded (${data.length})`, 'ready');
-				this.log(`Loaded ${year} data from file: ${file.name} (${data.length} records)`);
+				this.setStatus(`st-${type}`, `Loaded (${data.length})`, 'ready');
+				this.log(`Loaded ${type} data from file: ${file.name} (${data.length} records)`);
 
 				// Reset existing search/results state if needed?
 				// For now, allow re-run.
@@ -210,15 +208,16 @@ const App = {
 		this.progress(10, "Generating blocks");
 
 		// Set active datasets
+		// Set active datasets
 		if (this.mode === 'dedup') {
-			this.dsA = this.data1870;
-			this.dsB = this.data1870;                                              // Self match
-			this.mapA = this.map1870;
-			this.mapB = this.map1870;
+			this.dsA = this.dataVerified;
+			this.dsB = this.dataVerified;                                              // Self match
+			this.mapA = this.mapVerified;
+			this.mapB = this.mapVerified;
 		} else {
-			this.dsA = this.data1870;
+			this.dsA = this.dataVerified;
 			this.dsB = this.data1880;
-			this.mapA = this.map1870;
+			this.mapA = this.mapVerified;
 			this.mapB = this.map1880;
 		}
 
@@ -228,7 +227,7 @@ const App = {
 		// Dataset A
 		this.dsA.forEach(row => {
 			const keys = getBlockKeys(row);
-			keys.forEach(k => this.addToBlock(k, row, 70));                        // Using 70 as "List A"
+			keys.forEach(k => this.addToBlock(k, row, 'verified'));                        // Using 'verified' as "List A"
 		});
 
 		// Dataset B
@@ -245,9 +244,9 @@ const App = {
 
 	addToBlock: function (key, record, type)                                       // ADD TO BLOCK MAP
 	{
-		if (!this.blocks.has(key)) this.blocks.set(key, { list70: [], list80: [] });
+		if (!this.blocks.has(key)) this.blocks.set(key, { listVerified: [], list80: [] });
 		const b = this.blocks.get(key);
-		if (type === 70) b.list70.push(record);
+		if (type === 'verified') b.listVerified.push(record);
 		else b.list80.push(record);
 	},
 
@@ -270,19 +269,19 @@ const App = {
 				const key = blockKeys[i];
 				const block = this.blocks.get(key);
 
-				if (block.list70.length > 0 && block.list80.length > 0) {
-					for (const r70 of block.list70) {
+				if (block.listVerified.length > 0 && block.list80.length > 0) {
+					for (const rVerified of block.listVerified) {
 						for (const r80 of block.list80) {
 							// If Deduping, skip self-matches and duplicates (A-B vs B-A)
-							// We only want r70.line < r80.line
+							// We only want rVerified.line < r80.line
 							if (this.mode === 'dedup') {
-								if (parseInt(r70.line) >= parseInt(r80.line)) continue;
+								if (parseInt(rVerified.line) >= parseInt(r80.line)) continue;
 							}
 
-							const pairId = `${r70.line}-${r80.line}`;
+							const pairId = `${rVerified.line}-${r80.line}`;
 							if (candidateMap.has(pairId)) continue;                // Skip duplicates
 
-							const res = calculateScore(r70, r80, this.mode);
+							const res = calculateScore(rVerified, r80, this.mode);
 
 							let tier = 0;
 							if (this.mode === 'dedup') {
@@ -299,7 +298,7 @@ const App = {
 
 							if (tier > 0) {
 								candidateMap.set(pairId, {
-									r70, r80, score: res.score, details: res.details, tier
+									rVerified, r80, score: res.score, details: res.details, tier
 								});
 							}
 						}
@@ -333,21 +332,21 @@ const App = {
 		// Sort by score descending
 		this.candidates.sort((a, b) => b.score - a.score);
 
-		const used70 = new Set();
+		const usedVerified = new Set();
 		const used80 = new Set();
 
 		// Temporary containers for identification
 		this.tier1 = [];
 
 		for (const cand of this.candidates) {
-			const id70 = cand.r70.line;
+			const idVerified = cand.rVerified.line;
 			const id80 = cand.r80.line;
 
 			// One person can match at most ONE person in the other census
 			// In dedup mode, we also want unique pairings. 
-			if (used70.has(id70) || used80.has(id80)) continue;                    // Skip duplicates
+			if (usedVerified.has(idVerified) || used80.has(id80)) continue;                    // Skip duplicates
 
-			used70.add(id70);
+			usedVerified.add(idVerified);
 			used80.add(id80);
 
 			if (cand.tier === 1) this.tier1.push(cand);
@@ -398,19 +397,19 @@ const App = {
 
 		// Map to track all candidates
 		const candidateMap = new Map();
-		this.candidates.forEach(c => candidateMap.set(`${c.r70.line}-${c.r80.line}`, c));
+		this.candidates.forEach(c => candidateMap.set(`${c.rVerified.line}-${c.r80.line}`, c));
 
 		let boosted = 0;
 
 		anchors.forEach(anchor => {
-			const kA = getFamKey(anchor.r70);
+			const kA = getFamKey(anchor.rVerified);
 			const kB = getFamKey(anchor.r80);
 
 			const hA = houseA.get(kA) || [];
 			const hB = houseB.get(kB) || [];
 
 			hA.forEach(memberA => {
-				if (memberA.line === anchor.r70.line) return;
+				if (memberA.line === anchor.rVerified.line) return;
 
 				hB.forEach(memberB => {
 					if (memberB.line === anchor.r80.line) return;
@@ -424,7 +423,7 @@ const App = {
 					if (!candidate) {
 						const res = calculateScore(memberA, memberB, this.mode);
 						if (res.score > 20) {
-							candidate = { r70: memberA, r80: memberB, score: res.score, details: res.details, tier: 0 };
+							candidate = { rVerified: memberA, r80: memberB, score: res.score, details: res.details, tier: 0 };
 						} else {
 							return;
 						}
@@ -450,8 +449,6 @@ const App = {
 					}
 
 					// Child match (using 1880 relation field logic, or generic parent/child logic if available)
-					// In dedup (1870-1870), relation fields might not be 'son/dau' standard if 1870 data is different.
-					// But we use 'relation' field.
 					if (relB.includes('son') || relB.includes('dau') || relB.includes('child')) {
 						const childAge = parseInt(memberB.age) || 0;
 						if (childAge > 10) {
@@ -506,7 +503,7 @@ const App = {
 		this.progress(90, "Finalizing");
 
 		this.candidates.sort((a, b) => b.score - a.score);
-		const used70 = new Set();
+		const usedVerified = new Set();
 		const used80 = new Set();
 
 		this.tier1 = [];
@@ -516,18 +513,18 @@ const App = {
 		let count = 0;
 		for (const cand of this.candidates) {
 
-			const id70 = cand.r70.line;
+			const idVerified = cand.rVerified.line;
 			const id80 = cand.r80.line;
 
 			if (this.mode === 'dedup') {
 				// Dedup: ID space is shared. Ensure unique row usage globally.
-				if (used70.has(id70) || used70.has(id80)) continue;
+				if (usedVerified.has(idVerified) || usedVerified.has(id80)) continue;
 			}
 			else if (this.mode === 'match') {
 				// Match: Distinct ID spaces.
-				if (used70.has(id70) || used80.has(id80)) continue;
+				if (usedVerified.has(idVerified) || used80.has(id80)) continue;
 			}
-			used70.add(id70);
+			usedVerified.add(idVerified);
 			used80.add(id80);
 			if (cand.tier === 1) this.tier1.push(cand);
 			else if (cand.tier === 2) this.tier2.push(cand);
@@ -568,7 +565,7 @@ const App = {
 		const famKey = record.family;
 		if (!famKey) return '(No Family ID)';
 		// Identify Map
-		let map = this.map1870;
+		let map = this.mapVerified;
 		if (dataset === this.data1880) map = this.map1880;
 
 		const trueIdx = map.get(String(record.line));
@@ -640,7 +637,7 @@ const App = {
 						let cls = 'score-high'; // Relations are usually high confidence by definition of the algo
 
 						html += `
-						<div class="match-item" data-l70="${rRel.line || 0}" data-l80="${rHead.line || 0}">
+						<div class="match-item" data-lver="${rRel.line || 0}" data-l80="${rHead.line || 0}">
                              <div class="match-header">
                                 <span class="badge ${cls}" style="font-size:1.1em">REL</span>
                             </div>
@@ -674,17 +671,17 @@ const App = {
 						const detailsHtml = (m.details || '').split(', ').map(d => `<span class="ev-tag">${d}</span>`).join('');
 
 						html += `
-							<div class="match-item" data-l70="${m.r70.line}" data-l80="${m.r80.line}">
+							<div class="match-item" data-lver="${m.rVerified.line}" data-l80="${m.r80.line}">
 								<div class="match-header">
 									<span class="badge ${cls}" style="font-size:1.1em">${m.score}</span>
 								</div>
 								<div class="match-grid">
 									<div class="rec">
-										<span>${this.mode === 'dedup' ? 'Rec A' : '1870'} (Line ${m.r70.line})</span>
-										<strong>${m.r70.full_name}</strong>
-										<span>Age: ${m.r70.age} | Born: ${m.r70.birth_year} | ${m.r70.birth_place} | ${m.r70.race}/${m.r70.gender}</span>
-										<span>Occ: ${m.r70.occupation}</span>
-										<span>Household: ${this.getHouseholdMembers(m.r70, this.dsA)}</span>
+										<span>${this.mode === 'dedup' ? 'Rec A' : 'Verified'} (Line ${m.rVerified.line})</span>
+										<strong>${m.rVerified.full_name}</strong>
+										<span>Age: ${m.rVerified.age} | Born: ${m.rVerified.birth_year} | ${m.rVerified.birth_place} | ${m.rVerified.race}/${m.rVerified.gender}</span>
+										<span>Occ: ${m.rVerified.occupation}</span>
+										<span>Household: ${this.getHouseholdMembers(m.rVerified, this.dsA)}</span>
 									</div>
 									<div class="rec">
 										<span>${this.mode === 'dedup' ? 'Rec B' : '1880'} (Line ${m.r80.line})</span>
@@ -711,7 +708,7 @@ const App = {
 		}, 50);
 	},
 
-	showContext: function (l70, l80)                                               // DISPLAY CONTEXT
+	showContext: function (lVer, l80)                                               // DISPLAY CONTEXT
 	{
 		const renderBox = (data, map, line, containerId) => {
 			const $box = $(containerId);
@@ -761,12 +758,12 @@ const App = {
 		// If match mode, mapA = map1870, mapB = map1880.
 
 		// Fallback if not set (e.g. initial load)
-		let setA = this.dsA.length ? this.dsA : this.data1870;
+		let setA = this.dsA.length ? this.dsA : this.dataVerified;
 		let setB = this.dsB.length ? this.dsB : this.data1880;
-		let mapA = this.mapA || this.map1870;
+		let mapA = this.mapA || this.mapVerified;
 		let mapB = this.mapB || this.map1880;
 
-		renderBox(setA, mapA, l70, '#context-1870');
+		renderBox(setA, mapA, lVer, '#context-verified');
 		renderBox(setB, mapB, l80, '#context-1880');
 	},
 
@@ -781,7 +778,7 @@ const App = {
 
 			allTiers.forEach(m => {
 				changes.push({
-					theLine: m.r70.line,
+					theLine: m.rVerified.line,
 					theChange: `Duplicate of Line ${m.r80.line} (Score: ${m.score})`
 				});
 			});
@@ -818,9 +815,9 @@ const App = {
 			let matchCount = 0;
 			allTiers.forEach(m => {
 				if (m.score >= cutoff) {
-					if (m.r70.egoid) {
-						// "add the egoid of the 1870 row to the egoid column of the 1880 row"
-						const val = m.r70.egoid;
+					if (m.rVerified.egoid) {
+						// "add the egoid of the verified row to the egoid column of the 1880 row"
+						const val = m.rVerified.egoid;
 						newEgoids.set(String(m.r80.line), val);
 						matchCount++;
 					}
