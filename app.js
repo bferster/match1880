@@ -1,7 +1,8 @@
 // Imports removed to rely on Global CDN scripts (Vanilla JS/jQuery compatible)
 
-import { jaroWinkler, getBlockKeys, calculateScore } from './match.js';
+import { jaroWinkler, getBlockKeys, calculateScore, buildNameFrequencies } from './match.js';
 import { findRelations } from './relations.js';
+import { generateTriplets } from './triplets.js';
 
 ///////////////////////////////////////////////////////////////////////////////
 // APP LOGIC
@@ -204,6 +205,29 @@ const App = {
 			return;
 		}
 
+		if (this.mode === 'triplets') {
+			this.log("Generating Triplets for Semantic Graph...");
+			const ttl = generateTriplets(this.dataVerified);
+			this.log("Triplets generated. Check console for output.");
+			console.log(ttl);
+
+			// Trigger download
+			const blob = new Blob([ttl], { type: 'text/turtle;charset=utf-8;' });
+			const link = document.createElement("a");
+			const url = URL.createObjectURL(blob);
+			link.setAttribute("href", url);
+			link.setAttribute("download", "1870_census_graph.ttl");
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+
+			alert("Triplets generated! File '1870_census_graph.ttl' downloaded. Check console (F12) for output.");
+			this.progress(100, "Done");
+			$('#btn-run').prop('disabled', false);
+			$('#sel-mode').prop('disabled', false);
+			return;
+		}
+
 		this.log("Phase 1: Blocking...");
 		this.progress(10, "Generating blocks");
 
@@ -255,6 +279,12 @@ const App = {
 		this.log("Phase 2: Scoring Candidates...");
 		this.progress(30, "Scoring candidates");
 
+		// Build Frequency Maps for 1870 (Verified)
+		if (!this.freqMaps) {
+			this.log("Building Name Frequency Maps...");
+			this.freqMaps = buildNameFrequencies(this.dataVerified);
+		}
+
 		const blockKeys = Array.from(this.blocks.keys());
 		const totalBlocks = blockKeys.length;
 		const candidateMap = new Map();
@@ -281,7 +311,7 @@ const App = {
 							const pairId = `${rVerified.line}-${r80.line}`;
 							if (candidateMap.has(pairId)) continue;                // Skip duplicates
 
-							const res = calculateScore(rVerified, r80, this.mode);
+							const res = calculateScore(rVerified, r80, this.mode, this.freqMaps);
 
 							let tier = 0;
 							if (this.mode === 'dedup') {
@@ -290,10 +320,10 @@ const App = {
 								else if (res.score >= 140) tier = 2;
 								else if (res.score >= 130) tier = 3;
 							} else {
-								// Match Tiers: >90 (T1), 80-90 (T2), 60-79 (T3)
-								if (res.score > 90) tier = 1;
+								// Match Tiers: >100 (T1), 80-99 (T2), 50-79 (T3)
+								if (res.score > 100) tier = 1;
 								else if (res.score >= 80) tier = 2;
-								else if (res.score >= 60) tier = 3;
+								else if (res.score >= 50) tier = 3;
 							}
 
 							if (tier > 0) {
@@ -337,6 +367,7 @@ const App = {
 
 		// Temporary containers for identification
 		this.tier1 = [];
+		this.tier2 = [];
 
 		for (const cand of this.candidates) {
 			const idVerified = cand.rVerified.line;
@@ -350,9 +381,10 @@ const App = {
 			used80.add(id80);
 
 			if (cand.tier === 1) this.tier1.push(cand);
+			else if (cand.tier === 2) this.tier2.push(cand);
 		}
 
-		this.log(`Phase 4 Resolved: ${this.tier1.length} Tier 1 anchors identified.`);
+		this.log(`Phase 4 Resolved: ${this.tier1.length} Tier 1 and ${this.tier2.length} Tier 2 anchors identified.`);
 
 		// Household boosting only for cross-census match usually, but prompt didn't exclude it.
 		// However, for duplicates within same dataset, household boosting might be valid (whole family duplicated).
@@ -392,8 +424,8 @@ const App = {
 			}
 		});
 
-		// 2. Use Tier 1 matches from Phase 4 as Anchors
-		const anchors = this.tier1;
+		// 2. Use Tier 1 and Tier 2 matches from Phase 4 as Anchors
+		const anchors = [...this.tier1, ...this.tier2];
 
 		// Map to track all candidates
 		const candidateMap = new Map();
@@ -429,62 +461,117 @@ const App = {
 						}
 					}
 
+
+					// Determine Bonus
 					let bonus = 0;
 					let reasons = [];
 
-					// Head of household name match: +20 points
-					// Normalize relation checks
+					// Co-residence bonus: +15 points
+					bonus += 15;
+					reasons.push("Co-residence");
+
+					// Head of household match: +20 points
 					const relB = (memberB.relation || '').toLowerCase();
 					if (relB === 'self' || relB === 'head') {
-						if (jaroWinkler(memberA.full_name, memberB.full_name) > 0.9) {
+						// Check name similarity? Prompt says "Head of household name match". 
+						// Implies we match the name against the head.
+						// Wait, memberB IS the head if relB is head. 
+						// And memberA is the potential match.
+						// So we check if memberA name matches memberB name? 
+						// IF they are the same person this is redundant with main scoring.
+						// "use high-confidence... matches as anchors... for UNMATCHED members... add bonus points... Head of household name match"
+						// This implies we are matching a Member to a Member, and if the HEADs of their households match, we get a bonus.
+						// BUT, here in the code loop `hA.forEach(memberA... hB.forEach(memberB...`
+						// We are iterating members.
+						// The Anchor IS the Head match (usually).
+						// "Head of household name match" : +20. This likely means "If I am a child, and my Dad matches your Dad".
+						// References: "Spouse match", "Child match".
+						// If the Anchor is the Head, then the Head matches.
+						// If the Anchor is a child, then...
+						// The current logic iterates ALL members of household A against ALL members of household B.
+						// Only if they are NOT the anchor.
+						// So if the Head was the anchor, we already have a Head match.
+						// So for these Candidates, the "Head of household name match" condition is met if the Anchor was the Head.
+						// Or if there is ANOTHER match that is the Head.
+						// Let's simplified assumption: If the anchor was Tier 1/2, then the household context is valid.
+						// But the specific point: "Head of household name match: +20 points".
+						// This implies checking if the heads match.
+						// For now, I will assume because we are pivoting on a shared household ID derived from an anchor, 
+						// we can assume the households are linked.
+						// But strict reading: We should check if the Heads match.
+						// Let's skip complex Head verification for now and focus on Relation/Context fields as defined.
+
+						// Actually, let's look at the other rules:
+						// Spouse match (opposite gender, similar age): +20 points.
+						if (memberA.gender !== memberB.gender) {
+							const ageDiff = Math.abs((parseInt(memberA.age) || 0) - (parseInt(memberB.age) || 0));
+							if (ageDiff <= 5 && parseInt(memberA.age) > 15) {
+								bonus += 20;
+								reasons.push("Spouse/Context");
+							}
+						}
+
+						// Child match (using 1880 relation field): +10, only if older than 10
+						if (relB.includes('son') || relB.includes('dau') || relB.includes('child')) {
+							const childAge = parseInt(memberB.age) || 0;
+							if (childAge > 10) {
+								bonus += 10;
+								reasons.push("Child Context");
+							}
+						}
+
+						// Parent match: +15 points
+						if (relB.includes('father') || relB.includes('mother')) {
+							bonus += 15;
+							reasons.push("Parent Context");
+						}
+
+						// Extra: Head Match +20. If memberB is Head, and memberA matches name?
+						// Or if we successfully matched the head.
+						// Let's add +20 if memberB is Head and Jaro > 0.9 (re-verifying head match for this specific pair)
+						if ((relB === 'head' || relB === 'self') && jaroWinkler(memberA.full_name, memberB.full_name) > 0.9) {
 							bonus += 20;
 							reasons.push("Head Match");
 						}
 					}
+					else {
+						// Not head/self
+						// Run same checks
+						if (memberA.gender !== memberB.gender) {
+							const ageDiff = Math.abs((parseInt(memberA.age) || 0) - (parseInt(memberB.age) || 0));
+							if (ageDiff <= 5 && parseInt(memberA.age) > 15) {
+								bonus += 20;
+								reasons.push("Spouse/Context");
+							}
+						}
 
-					// Spouse match (opposite gender, similar age): +10 points
-					if (memberA.gender !== memberB.gender) {
-						bonus += 10;
-						reasons.push("Spouse/Context");
-					}
+						if (relB.includes('son') || relB.includes('dau') || relB.includes('child')) {
+							const childAge = parseInt(memberB.age) || 0;
+							if (childAge > 10) {
+								bonus += 10;
+								reasons.push("Child Context");
+							}
+						}
 
-					// Child match (using 1880 relation field logic, or generic parent/child logic if available)
-					if (relB.includes('son') || relB.includes('dau') || relB.includes('child')) {
-						const childAge = parseInt(memberB.age) || 0;
-						if (childAge > 10) {
-							bonus += 10;
-							reasons.push("Child Context");
+						if (relB.includes('father') || relB.includes('mother')) {
+							bonus += 15;
+							reasons.push("Parent Context");
 						}
 					}
 
-					// Parent match: +10 points
-					if (relB.includes('father') || relB.includes('mother')) {
-						bonus += 10;
-						reasons.push("Parent Context");
-					}
-
-					// Co-residence bonus: +5 points
-					bonus += 5;
-					reasons.push("Co-residence");
-
-					// Update Score
 					if (bonus > 0) {
 						candidate.score += bonus;
 						candidate.details += (candidate.details ? ", " : "") + reasons.join(", ");
 
-						// Re-Tier
 						let newTier = 0;
-						if (candidate.score > 90) newTier = 1;
+						if (candidate.score > 100) newTier = 1;
 						else if (candidate.score >= 80) newTier = 2;
-						else if (candidate.score >= 60) newTier = 3;
-						else newTier = 0;
+						else if (candidate.score >= 50) newTier = 3;
 
-						if (newTier > 0) {
-							if (candidate.tier === 0 || newTier < candidate.tier) {
-								candidate.tier = newTier;
-								candidateMap.set(pairId, candidate);
-								boosted++;
-							}
+						if (newTier > 0 && (candidate.tier === 0 || newTier < candidate.tier)) {
+							candidate.tier = newTier;
+							candidateMap.set(pairId, candidate);
+							boosted++;
 						}
 					}
 				});

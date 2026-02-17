@@ -199,7 +199,7 @@ Use the following rules when generating HTML, CSS, and JavaScript code for me. T
 - **Methods**: PascalCase (`ParseScript`, `AudioInit`, `ShowMedia`, `CountWords`).
 - **Standalone functions**: PascalCase (`Sound`, `PopUp`, `TimecodeToSeconds`).
 - **CSS classes**: lowercase with `el-` prefix and hyphen separation (`el-rawscript`, `el-media`, `el-control`).
-- **HTML IDs**: same as CSS class names (`el-slider`, `el-play`, `el-now`).
+- **HTML IDs**: same as CSS class names (`ve-slider`, `ve-play`, `ve-now`).
 
 ---
 

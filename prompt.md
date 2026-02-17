@@ -291,11 +291,13 @@ Add a button to save to clipboard {
 		add the following options: {
 			"Match datasets"
 			"Find duplicates"
-			"Find relations"	
+			"Find relations"
+			"Make Triplets"
 			}	
 		perform the following action when the pulldown menu is clicked: {
-			If "Match datasets" is selected follow the skill at @Block-matching-strategy.md
+			If "Match datasets" is selected follow the skill at @Maatch1870to1880.md
 			If "Find relations" is selected follow the skill at @find-relations-strategy.md
+			If "Make Triplets" is selected follow the skill at @Make Triplets.md
 			If "Find duplicates" is selected follow the skill at @Find-Duplicates-Skill.md using @ALB_1870.csv as the dataset.
 				The line number of the result is passed to the top showContext function.
 				The line number of the match result is passed to the bottom showContext function.

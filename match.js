@@ -1,4 +1,7 @@
 
+// ============================================================================
+// UTILITIES
+// ============================================================================
 
 export function jaroWinkler(s1, s2)                                            // CALCULATE STRING DISTANCE
 {
@@ -99,76 +102,158 @@ export function getBlockKeys(record)                                    // GENER
 	return keys;
 }
 
-export function calculateScore(set1, set2, mode = 'match')                          // SCORE CANDIDATE PAIR
+// ============================================================================
+// PHASE 1: SCORING w/ FREQUENCY COMPENSATION
+// ============================================================================
+
+export function buildNameFrequencies(dataset)                                  // BUILD NAME FREQ MAPS
 {
-	let score = 0;                                                                       // Init score
-	const details = [];                                                                  // Init details
-	const get = (r, f) => (r[f] || '').toString().trim().replace(/\s+/g, ' ').toUpperCase(); // Helper: Get value normalized
-	const val = (r, f) => parseInt(r[f]) || 0;                                           // Helper: Get value as non-null int
+	const firstNameFreq = new Map();
+	const lastNameFreq = new Map();
 
-	const s = {                                                                          // Normalize data
-		full1: get(set1, 'full_name'), full2: get(set2, 'full_name'),               	 // Full Names
-		last1: get(set1, 'last_name') || get(set1, 'last-_name'),
-		last2: get(set2, 'last_name') || get(set2, 'last-_name'),                        // Last Names (Support Typo)
-		first1: get(set1, 'first_name'), first2: get(set2, 'first_name'),                // First Names
-		mid1: get(set1, 'middle_name'), mid2: get(set2, 'middle_name'),                  // Middle Names
-		by1: val(set1, 'birth_year'), by2: val(set2, 'birth_year'),                      // Birth Years
-		gen1: get(set1, 'gender'), gen2: get(set2, 'gender'),                            // Genders
-		race1: get(set1, 'race'), race2: get(set2, 'race'),                              // Races
-		bpl1: get(set1, 'birth_place'), bpl2: get(set2, 'birth_place'),                  // Birth Places
-		ny_last1: get(set1, 'nysiis_last_name'), ny_last2: get(set2, 'nysiis_last_name'), // NYSIIS Last
-		ny_first1: get(set1, 'nysiis_first_name') || get(set1, 'norm_first_name'),        // NYSIIS First 70
-		ny_first2: get(set2, 'nysiis_first_name') || get(set2, 'norm_first_name'),        // NYSIIS First 80
-		norm_occ1: get(set1, 'norm_occupation'), norm_occ2: get(set2, 'norm_occupation'), // Occupations
+	dataset.forEach(p => {
+		const f = (p.first_name || '').toLowerCase().trim();
+		const l = (p.last_name || p['last-_name'] || '').toLowerCase().trim();
+
+		if (f) firstNameFreq.set(f, (firstNameFreq.get(f) || 0) + 1);
+		if (l) lastNameFreq.set(l, (lastNameFreq.get(l) || 0) + 1);
+	});
+
+	return { firstNameFreq, lastNameFreq };
+}
+
+export function getNameWeightModifier(name, freqMap)                           // GET RARITY MODIFIER
+{
+	if (!name || !freqMap) return 0;
+	const n = name.toLowerCase().trim();
+	const count = freqMap.get(n) || 0;
+
+	if (count === 0) return 0;                                           // Missing/Not in map
+	if (count <= 5) return 15;                                           // Very Rare
+	if (count <= 20) return 5;                                           // Uncommon
+	if (count >= 21 && count <= 100) return 0;                           // Average (Wait, spec said 21-100 is 0, so explicit return 0)
+	if (count > 500) return -15;                                         // Extremely Common
+	if (count > 100) return -5;                                          // Common
+
+	return 0; // Fallback
+}
+
+export function calculateScore(set1, set2, mode = 'match', freqMaps = null)      // SCORE CANDIDATE PAIR
+{
+	let score = 0;
+	const details = [];
+	const get = (r, f) => (r[f] || '').toString().trim().replace(/\s+/g, ' ').toUpperCase();
+	const val = (r, f) => parseInt(r[f]) || 0;
+
+	// Normalize data helper
+	const norm = (str) => (str || '').toLowerCase().trim();
+
+	const s = {
+		full1: norm(set1.full_name), full2: norm(set2.full_name),
+		last1: norm(set1.last_name || set1['last-_name']),
+		last2: norm(set2.last_name || set2['last-_name']),
+		first1: norm(set1.first_name), first2: norm(set2.first_name),
+		mid1: norm(set1.middle_name), mid2: norm(set2.middle_name),
+		norm1: norm(set1.norm_first_name), norm2: norm(set2.norm_first_name),
+		by1: val(set1, 'birth_year'), by2: val(set2, 'birth_year'),
+		gen1: get(set1, 'gender'), gen2: get(set2, 'gender'),
+		race1: get(set1, 'race'), race2: get(set2, 'race'),
+		bpl1: get(set1, 'birth_place'), bpl2: get(set2, 'birth_place'),
+		nysiis_last1: get(set1, 'nysiis_last_name'), nysiis_last2: get(set2, 'nysiis_last_name'),
+		nysiis_first1: get(set1, 'nysiis_first_name'), nysiis_first2: get(set2, 'nysiis_first_name'),
+		norm_occ1: get(set1, 'norm_occupation'), norm_occ2: get(set2, 'norm_occupation'),
 	};
-	const jwFirst = jaroWinkler(s.first1, s.first2);                                     // Jaro First
-	const absDiff = Math.abs(s.by1 - s.by2);											 // Difference in birth year
 
-	// PENALTIES
+	let nameMatched = false;
 
-	if (s.gen1 && s.gen2 && s.gen1 !== s.gen2) { score -= 500; details.push("Gender mismatch"); }          	// Gender
-	if (s.by1 && s.by2 && (s.by2 < s.by1) && (mode == "match")) {                                         // If first is older (impossible)
-		const diff = s.by1 - s.by2;                                                    	// Diff in age
-		if (diff > 10) { score -= 100; details.push("Age regression > 10"); }           // Major rewind
-	}
-	if (s.bpl1 && s.bpl2 && s.bpl1 !== 'VA' && s.bpl2 !== 'VA' && s.bpl1 !== s.bpl2) {  // Birth Place Check
-		score -= 50; details.push("Contradictory birth place");                         // Bad BPL
-	}
-	// BIRTH
+	// --- NAME MATCH ---
 
-	if (s.by1 === s.by2 && s.by1) { score += 50; details.push("Exact birth year"); }  	// Exact BY
-	else if (s.by1 && s.by2 && absDiff <= 2) { score += 30; details.push("Birth year +/- 2"); }           // Close BY
-	else if (s.by1 && s.by2 && absDiff <= 5) { score += 5; details.push("Birth year +/- 5"); }            // Near BY
-	else if (s.by1 && s.by2 && absDiff >= 10) { score -= 200; details.push("Birth year > 10"); }           // Far
-
-	// NAMES
-
-	if (s.full1 === s.full2 && s.full1.length > 0) {                                  	// Identical Full
+	if (s.full1 === s.full2 && s.full1) {
 		score += 100; details.push("Exact Full");
+		nameMatched = true;
 	}
-	else if (s.last1 === s.last2 && s.first1 === s.first2 && s.last1) {           		// Exact F/L
-		score += 80; details.push("Exact First/Last");
+	else if (s.last1 === s.last2 && s.first1 === s.first2 && s.last1) {
+		// Exact Last & Exact First
+		if (!s.mid1 && !s.mid2) {
+			score += 80; details.push("Exact First/Last (No Mid)");
+		} else {
+			score += 80; details.push("Exact First/Last");
+		}
+		nameMatched = true;
 	}
-	else if (s.last1 === s.last2 && get(set1, 'norm_first_name') === get(set2, 'norm_first_name') && s.last1) { // Last identical, first normalized										
-		score += 70; details.push("Exact Last + Norm First");                                  	// Norm First
+	else if (s.last1 === s.last2 && s.norm1 === s.norm2 && s.last1) {
+		score += 70; details.push("Exact Last + Norm First");
+		nameMatched = true;
 	}
-	else if (s.last1 === s.last2 && jwFirst > 0.85) {                                 	// Fuzzy First
-		score += 60; details.push("Exact Last + Fuzzy First");
+	else if (s.last1 === s.last2 && s.last1) {
+		const jwFirst = jaroWinkler(s.first1, s.first2);
+		if (jwFirst > 0.8) {
+			score += 60; details.push(`Exact Last + Fuzzy First (${jwFirst.toFixed(2)})`);
+			nameMatched = true;
+		}
+		else if (s.first1.charAt(0) === s.first2.charAt(0) && s.first1) {
+			score += 40; details.push("Exact Last + First Initial");
+			// Initial match is partial, maybe not full weight for freq mod
+		}
+	}
+	else {
+		const jwFirst = jaroWinkler(s.first1, s.first2);
+		if (jwFirst >= 0.85) {
+			score += 20; details.push(`Fuzzy First Only (${jwFirst.toFixed(2)})`);
+		}
 	}
 
-	// RACE																				
+	// --- COMMON NAME COMPENSATION ---
+	// "If the first_name is matched in the Name_match phase..."
+	// We'll apply if we have a decided 'nameMatched' OR high fuzzy first match
+	// Simplification: Apply if we added positive score for name
 
-	if ((s.race1 === s.race2 && s.race1)) {                                          	// Race Exact
-		score += 10; details.push("Race Match");
-	}
-	else if (s.race1 !== 'W' && s.race2 !== 'W' && s.race1 && s.race2) {           		// Race Non-White
-		score += 10; details.push("Non-White Match");
+	if (freqMaps) {
+		// Only apply modifiers if we have some name match foundation
+		if (score > 0) {
+			const modF = getNameWeightModifier(s.first1, freqMaps.firstNameFreq);
+			if (modF !== 0) { score += modF; details.push(`Freq-first:${modF}`); }
+
+			const modL = getNameWeightModifier(s.last1, freqMaps.lastNameFreq);
+			if (modL !== 0) { score += modL; details.push(`Freq-last:${modL}`); }
+		}
 	}
 
-	// OCCUPATION
+	// --- BIRTH YEAR ---
 
-	if (s.norm_occ1 === s.norm_occ2 && s.norm_occ1) {
-		score += 10; details.push("Norm occupation");
+	const byDiff = Math.abs(s.by1 - s.by2);
+	if (s.by1 === s.by2 && s.by1) { score += 50; details.push("Exact BY"); }
+	else if (s.by1 && s.by2 && byDiff <= 2) { score += 30; details.push("BY +/- 2"); }
+	else if (s.by1 && s.by2 && byDiff <= 5) { score += 5; details.push("BY +/- 5"); }
+
+	// --- OCCUPATION ---
+
+	if (s.norm_occ1 === s.norm_occ2 && s.norm_occ1) { score += 10; details.push("Occupation Match"); }
+
+	// --- RACE ---
+
+	if (s.race1 === s.race2 && s.race1) { score += 10; details.push("Exact Race"); }
+	else if ((s.race1 === 'B' && s.race2 === 'M') || (s.race1 === 'M' && s.race2 === 'B')) {
+		score += 10; details.push("Race B/M");
 	}
+
+	// --- PENALTIES ---
+
+	if (s.gen1 !== s.gen2 && s.gen1 && s.gen2) { score -= 500; details.push("Gender Mismatch"); }
+
+	if (s.by1 && s.by2 && s.by2 < s.by1 && mode === 'match') { // 1880 < 1870
+		const diff = s.by1 - s.by2;
+		if (diff > 10) { score -= 100; details.push("Age Regress > 10"); }
+		else if (diff > 5) { score -= 20; details.push("Age Regress > 5"); }
+	}
+
+	if (s.bpl1 !== s.bpl2 && s.bpl1 !== 'VA' && s.bpl2 !== 'VA' && s.bpl1 && s.bpl2) {
+		score -= 50; details.push("Contradictory BPL");
+	}
+
+	if (s.nysiis_last1 !== s.nysiis_last2 && s.nysiis_last1) { score -= 100; details.push("NYSIIS Last Mismatch"); }
+	if (s.nysiis_first1 !== s.nysiis_first2 && s.nysiis_first1) { score -= 40; details.push("NYSIIS First Mismatch"); }
+
+
 	return { score, details: details.join(", ") };
 }
