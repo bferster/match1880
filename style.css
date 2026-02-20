@@ -264,6 +264,10 @@ h1 {
 	border: 1px solid #e2e8f0;
 }
 
+.ev-tag.ev-negative {
+	color: #e11d48;
+}
+
 /* Context Panel */
 #context-panel {
 	position: fixed;

@@ -231,20 +231,22 @@ export function calculateScore(set1, set2, mode = 'match', freqMaps = null)     
 	if (s.norm_occ1 === s.norm_occ2 && s.norm_occ1) { score += 10; details.push("Occupation Match"); }
 
 	// --- RACE ---
+	// (No positive points added for race match)
 
-	if (s.race1 === s.race2 && s.race1) { score += 10; details.push("Exact Race"); }
-	else if ((s.race1 === 'B' && s.race2 === 'M') || (s.race1 === 'M' && s.race2 === 'B')) {
-		score += 10; details.push("Race B/M");
-	}
 
 	// --- PENALTIES ---
 
-	if (s.gen1 !== s.gen2 && s.gen1 && s.gen2) { score -= 500; details.push("Gender Mismatch"); }
+	if (s.gen1 !== s.gen2 && s.gen1 && s.gen2) { score -= 200; details.push("Gender Mismatch"); }
 
-	if (s.by1 && s.by2 && s.by2 < s.by1 && mode === 'match') { // 1880 < 1870
-		const diff = s.by1 - s.by2;
-		if (diff > 10) { score -= 100; details.push("Age Regress > 10"); }
-		else if (diff > 5) { score -= 20; details.push("Age Regress > 5"); }
+	if (s.by1 && s.by2) {
+		if (s.by2 < s.by1 && mode === 'match') { // 1880 < 1870
+			const diff = s.by1 - s.by2;
+			if (diff > 10) { score -= 50; details.push("Age Regress > 10"); }
+			else if (diff > 5) { score -= 20; details.push("Age Regress > 5"); }
+		}
+		if (Math.abs(s.by1 - s.by2) > 15) {
+			score -= 50; details.push("Age Gap > 15");
+		}
 	}
 
 	if (s.bpl1 !== s.bpl2 && s.bpl1 !== 'VA' && s.bpl2 !== 'VA' && s.bpl1 && s.bpl2) {
@@ -253,6 +255,13 @@ export function calculateScore(set1, set2, mode = 'match', freqMaps = null)     
 
 	if (s.nysiis_last1 !== s.nysiis_last2 && s.nysiis_last1) { score -= 100; details.push("NYSIIS Last Mismatch"); }
 	if (s.nysiis_first1 !== s.nysiis_first2 && s.nysiis_first1) { score -= 40; details.push("NYSIIS First Mismatch"); }
+
+	if (s.race1 && s.race2) {
+		if ((s.race1 === 'W' && (s.race2 === 'B' || s.race2 === 'M')) ||
+			(s.race2 === 'W' && (s.race1 === 'B' || s.race1 === 'M'))) {
+			score -= 50; details.push("Race Mismatch (B/M vs W)");
+		}
+	}
 
 
 	return { score, details: details.join(", ") };

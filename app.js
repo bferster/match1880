@@ -405,11 +405,12 @@ const App = {
 		const houseA = new Map();
 		const houseB = new Map();
 
-		// Generic Family Key Helper
-		const getFamKey = (r) => r.family;
+		// For 1870: dwelling number, fallback to family
+		const getFamKeyA = (r) => r.dwelling || r.family;
+		const getFamKeyB = (r) => r.family;
 
 		this.dsA.forEach(r => {
-			const k = getFamKey(r);
+			const k = getFamKeyA(r);
 			if (k) {
 				if (!houseA.has(k)) houseA.set(k, []);
 				houseA.get(k).push(r);
@@ -417,15 +418,12 @@ const App = {
 		});
 
 		this.dsB.forEach(r => {
-			const k = getFamKey(r);
+			const k = getFamKeyB(r);
 			if (k) {
 				if (!houseB.has(k)) houseB.set(k, []);
 				houseB.get(k).push(r);
 			}
 		});
-
-		// 2. Use Tier 1 and Tier 2 matches from Phase 4 as Anchors
-		const anchors = [...this.tier1, ...this.tier2];
 
 		// Map to track all candidates
 		const candidateMap = new Map();
@@ -433,153 +431,148 @@ const App = {
 
 		let boosted = 0;
 
-		anchors.forEach(anchor => {
-			const kA = getFamKey(anchor.rVerified);
-			const kB = getFamKey(anchor.r80);
+		// Process every unique household pair derived from candidates
+		const housePairs = new Set();
+		this.candidates.forEach(cand => {
+			const kA = getFamKeyA(cand.rVerified);
+			const kB = getFamKeyB(cand.r80);
+			if (kA && kB) housePairs.add(`${kA}|${kB}`);
+		});
 
+		for (const pairKey of housePairs) {
+			const [kA, kB] = pairKey.split('|');
 			const hA = houseA.get(kA) || [];
 			const hB = houseB.get(kB) || [];
 
+			// Find all cross-matches in these two households
+			const localMatches = [];
+
 			hA.forEach(memberA => {
-				if (memberA.line === anchor.rVerified.line) return;
-
 				hB.forEach(memberB => {
-					if (memberB.line === anchor.r80.line) return;
-
-					// In dedup mode, skip self/reverse
 					if (this.mode === 'dedup' && parseInt(memberA.line) >= parseInt(memberB.line)) return;
 
 					const pairId = `${memberA.line}-${memberB.line}`;
 					let candidate = candidateMap.get(pairId);
 
 					if (!candidate) {
-						const res = calculateScore(memberA, memberB, this.mode);
-						if (res.score > 20) {
-							candidate = { rVerified: memberA, r80: memberB, score: res.score, details: res.details, tier: 0 };
-						} else {
-							return;
-						}
+						const res = calculateScore(memberA, memberB, this.mode, this.freqMaps);
+						candidate = { rVerified: memberA, r80: memberB, score: res.score, details: res.details, tier: 0 };
+						candidateMap.set(pairId, candidate);
 					}
 
+					localMatches.push(candidate);
+				});
+			});
 
-					// Determine Bonus
-					let bonus = 0;
-					let reasons = [];
+			if (localMatches.length === 0) continue;
 
-					// Co-residence bonus: +15 points
-					bonus += 15;
-					reasons.push("Co-residence");
+			let headMatch = false;
+			let spouseMatch = false;
+			let childMatches = 0;
+			let parentMatch = false;
 
-					// Head of household match: +20 points
-					const relB = (memberB.relation || '').toLowerCase();
-					if (relB === 'self' || relB === 'head') {
-						// Check name similarity? Prompt says "Head of household name match". 
-						// Implies we match the name against the head.
-						// Wait, memberB IS the head if relB is head. 
-						// And memberA is the potential match.
-						// So we check if memberA name matches memberB name? 
-						// IF they are the same person this is redundant with main scoring.
-						// "use high-confidence... matches as anchors... for UNMATCHED members... add bonus points... Head of household name match"
-						// This implies we are matching a Member to a Member, and if the HEADs of their households match, we get a bonus.
-						// BUT, here in the code loop `hA.forEach(memberA... hB.forEach(memberB...`
-						// We are iterating members.
-						// The Anchor IS the Head match (usually).
-						// "Head of household name match" : +20. This likely means "If I am a child, and my Dad matches your Dad".
-						// References: "Spouse match", "Child match".
-						// If the Anchor is the Head, then the Head matches.
-						// If the Anchor is a child, then...
-						// The current logic iterates ALL members of household A against ALL members of household B.
-						// Only if they are NOT the anchor.
-						// So if the Head was the anchor, we already have a Head match.
-						// So for these Candidates, the "Head of household name match" condition is met if the Anchor was the Head.
-						// Or if there is ANOTHER match that is the Head.
-						// Let's simplified assumption: If the anchor was Tier 1/2, then the household context is valid.
-						// But the specific point: "Head of household name match: +20 points".
-						// This implies checking if the heads match.
-						// For now, I will assume because we are pivoting on a shared household ID derived from an anchor, 
-						// we can assume the households are linked.
-						// But strict reading: We should check if the Heads match.
-						// Let's skip complex Head verification for now and focus on Relation/Context fields as defined.
+			// Track unique 1880 lines we count as children
+			const countedChildren = new Set();
 
-						// Actually, let's look at the other rules:
-						// Spouse match (opposite gender, similar age): +20 points.
-						if (memberA.gender !== memberB.gender) {
-							const ageDiff = Math.abs((parseInt(memberA.age) || 0) - (parseInt(memberB.age) || 0));
-							if (ageDiff <= 5 && parseInt(memberA.age) > 15) {
-								bonus += 20;
-								reasons.push("Spouse/Context");
-							}
-						}
+			// Evaluate relationships based on all matches, regardless of tier or score
+			localMatches.forEach(m => {
 
-						// Child match (using 1880 relation field): +10, only if older than 10
-						if (relB.includes('son') || relB.includes('dau') || relB.includes('child')) {
-							const childAge = parseInt(memberB.age) || 0;
-							if (childAge > 10) {
-								bonus += 10;
-								reasons.push("Child Context");
-							}
-						}
+				const relB = (m.r80.relation || '').toLowerCase();
 
-						// Parent match: +15 points
-						if (relB.includes('father') || relB.includes('mother')) {
-							bonus += 15;
-							reasons.push("Parent Context");
-						}
+				if (relB.includes('head') || relB.includes('self')) {
+					headMatch = true;
+				}
+				else if (relB.includes('wife')) {
+					spouseMatch = true;
+				}
+				else if (m.rVerified.gender !== m.r80.gender) {
+					const year1 = parseInt(m.rVerified.birth_year) || 1870;
+					const year2 = parseInt(m.r80.birth_year) || 1880;
 
-						// Extra: Head Match +20. If memberB is Head, and memberA matches name?
-						// Or if we successfully matched the head.
-						// Let's add +20 if memberB is Head and Jaro > 0.9 (re-verifying head match for this specific pair)
-						if ((relB === 'head' || relB === 'self') && jaroWinkler(memberA.full_name, memberB.full_name) > 0.9) {
-							bonus += 20;
-							reasons.push("Head Match");
-						}
+					const ageDiff = Math.abs(year1 - year2);
+					const age1 = 1870 - year1;
+					const age2 = (this.mode === 'dedup' ? 1870 : 1880) - year2;
+
+					if (ageDiff <= 5 && age1 > 15 && age2 > 15 && !relB.includes('son') && !relB.includes('dau') && !relB.includes('child')) {
+						spouseMatch = true;
 					}
-					else {
-						// Not head/self
-						// Run same checks
-						if (memberA.gender !== memberB.gender) {
-							const ageDiff = Math.abs((parseInt(memberA.age) || 0) - (parseInt(memberB.age) || 0));
-							if (ageDiff <= 5 && parseInt(memberA.age) > 15) {
-								bonus += 20;
-								reasons.push("Spouse/Context");
-							}
-						}
+				}
 
-						if (relB.includes('son') || relB.includes('dau') || relB.includes('child')) {
-							const childAge = parseInt(memberB.age) || 0;
-							if (childAge > 10) {
-								bonus += 10;
-								reasons.push("Child Context");
-							}
-						}
+				if (relB.includes('son') || relB.includes('dau') || relB.includes('child')) {
+					const childYear = parseInt(m.r80.birth_year) || 1880;
+					const childAge = (this.mode === 'dedup' ? 1870 : 1880) - childYear;
 
-						if (relB.includes('father') || relB.includes('mother')) {
-							bonus += 15;
-							reasons.push("Parent Context");
-						}
+					if (childAge > 10 && !countedChildren.has(m.r80.line)) {
+						childMatches++;
+						countedChildren.add(m.r80.line);
+					}
+				}
+
+				if (relB.includes('father') || relB.includes('mother')) {
+					parentMatch = true;
+				}
+			});
+
+			let contextBonus = 0;
+			let contextReasons = [];
+
+			if (headMatch) { contextBonus += 20; contextReasons.push("Head Match"); }
+			if (spouseMatch) { contextBonus += 20; contextReasons.push("Spouse Match"); }
+			if (childMatches > 0) { contextBonus += (childMatches * 10); contextReasons.push(`Child Match x${childMatches}`); }
+			if (parentMatch) { contextBonus += 15; contextReasons.push("Parent Match"); }
+
+			const strongMatchingLines80 = new Set();
+			localMatches.forEach(m => {
+				// Consider a match valid for co-residence if score > 20 (it formed a candidate)
+				if (m.score > 20) {
+					strongMatchingLines80.add(m.r80.line);
+				}
+			});
+
+			// Apply the combined household boost to all candidates between hA and hB
+			if (contextBonus > 0 || strongMatchingLines80.size > 0) {
+				localMatches.forEach(candidate => {
+					let thisBonus = contextBonus;
+					let theseReasons = [...contextReasons];
+
+					const isSelfMatched = strongMatchingLines80.has(candidate.r80.line);
+					const otherMatchesCount = Math.max(0, strongMatchingLines80.size - (isSelfMatched ? 1 : 0));
+
+					if (otherMatchesCount > 0) {
+						thisBonus += (otherMatchesCount * 20);
+						theseReasons.push(otherMatchesCount === 1 ? "Co-residence" : `Co-residence x${otherMatchesCount}`);
 					}
 
-					if (bonus > 0) {
-						candidate.score += bonus;
-						candidate.details += (candidate.details ? ", " : "") + reasons.join(", ");
+					if (thisBonus > 0) {
+						candidate.score += thisBonus;
+						candidate.details += (candidate.details ? ", " : "") + theseReasons.join(", ");
 
 						let newTier = 0;
-						if (candidate.score > 100) newTier = 1;
-						else if (candidate.score >= 80) newTier = 2;
-						else if (candidate.score >= 50) newTier = 3;
+						if (this.mode === 'dedup') {
+							if (candidate.score > 150) newTier = 1;
+							else if (candidate.score >= 140) newTier = 2;
+							else if (candidate.score >= 130) newTier = 3;
+						} else {
+							if (candidate.score > 100) newTier = 1;
+							else if (candidate.score >= 80) newTier = 2;
+							else if (candidate.score >= 50) newTier = 3;
+						}
 
+						// Always update tier if it promotes the candidate
 						if (newTier > 0 && (candidate.tier === 0 || newTier < candidate.tier)) {
 							candidate.tier = newTier;
-							candidateMap.set(pairId, candidate);
+							boosted++;
+						} else if (newTier > 0 && candidate.tier === 0) {
+							candidate.tier = newTier;
 							boosted++;
 						}
 					}
 				});
-			});
-		});
+			}
+		}
 
 		this.log(`Boosted ${boosted} candidates via household context.`);
-		this.candidates = Array.from(candidateMap.values());
+		this.candidates = Array.from(candidateMap.values()).filter(c => c.tier > 0);
 
 		setTimeout(() => this.finalizeResults(), 100);
 	},
@@ -733,7 +726,7 @@ const App = {
                                     <span>1880 Head / Context</span>
                                     <strong>${rHead.full_name}</strong>
                                     <span>ID: ${rHead.egoid}</span>
-                                    <span>Age: ${rHead.age} | ${rHead.occupation}</span>
+                                    <span>Age: ${(this.mode === 'dedup' ? 1870 : 1880) - (parseInt(rHead.birth_year) || (this.mode === 'dedup' ? 1870 : 1880))} | ${rHead.occupation}</span>
                                     <div style="margin-top:4px; font-size:0.9em; color:#666">
                                     	<em>${m.details}</em>
                                     </div>
@@ -742,7 +735,7 @@ const App = {
                                     <span>1870 Relation Found</span>
                                     <strong>${rRel.full_name || 'Unknown'}</strong>
                                     <span>ID: ${rRel.egoid || '?'}</span>
-                                    <span>Age: ${rRel.age} | ${rRel.occupation}</span>
+                                    <span>Age: ${1870 - (parseInt(rRel.birth_year) || 1870)} | ${rRel.occupation}</span>
                                     <span>Relation: ${rRel.relation || '-'}</span>
                                 </div>
                             </div>
@@ -752,28 +745,38 @@ const App = {
 					// STANDARD RENDERER (Match / Dedup)
 					data.forEach(m => {
 						let cls = 'score-low';
+						let scoreStyle = 'font-size:1.1em;';
 						if (m.score > 90) cls = 'score-high';
 						else if (m.score >= 80) cls = 'score-med';
 
-						const detailsHtml = (m.details || '').split(', ').map(d => `<span class="ev-tag">${d}</span>`).join('');
+						if (m.score < 0) scoreStyle += ' color: #e11d48;'; // Pink for negative points
+
+						const detailsHtml = (m.details || '').split(', ').map(d => {
+							let ext = '';
+							const lower = d.toLowerCase();
+							if (lower.includes('mismatch') || lower.includes('gap') || lower.includes('regress') || lower.includes('contradictory') || d.match(/-\d+/)) {
+								ext = ' ev-negative';
+							}
+							return `<span class="ev-tag${ext}">${d}</span>`;
+						}).join('');
 
 						html += `
 							<div class="match-item" data-lver="${m.rVerified.line}" data-l80="${m.r80.line}">
 								<div class="match-header">
-									<span class="badge ${cls}" style="font-size:1.1em">${m.score}</span>
+									<span class="badge ${cls}" style="${scoreStyle}">${m.score}</span>
 								</div>
 								<div class="match-grid">
 									<div class="rec">
 										<span>${this.mode === 'dedup' ? 'Rec A' : 'Verified'} (Line ${m.rVerified.line})</span>
 										<strong>${m.rVerified.full_name}</strong>
-										<span>Age: ${m.rVerified.age} | Born: ${m.rVerified.birth_year} | ${m.rVerified.birth_place} | ${m.rVerified.race}/${m.rVerified.gender}</span>
+										<span>Age: ${1870 - (parseInt(m.rVerified.birth_year) || 1870)} | Born: ${m.rVerified.birth_year} | ${m.rVerified.birth_place} | ${m.rVerified.race}/${m.rVerified.gender}</span>
 										<span>Occ: ${m.rVerified.occupation}</span>
 										<span>Household: ${this.getHouseholdMembers(m.rVerified, this.dsA)}</span>
 									</div>
 									<div class="rec">
 										<span>${this.mode === 'dedup' ? 'Rec B' : '1880'} (Line ${m.r80.line})</span>
 										<strong>${m.r80.full_name}</strong>
-										<span>Age: ${m.r80.age} | Born: ${m.r80.birth_year} | ${m.r80.birth_place} | ${m.r80.race}/${m.r80.gender}</span>
+										<span>Age: ${(this.mode === 'dedup' ? 1870 : 1880) - (parseInt(m.r80.birth_year) || (this.mode === 'dedup' ? 1870 : 1880))} | Born: ${m.r80.birth_year} | ${m.r80.birth_place} | ${m.r80.race}/${m.r80.gender}</span>
 										<span>Occ: ${m.r80.occupation}</span>
 										<span>Household: ${this.getHouseholdMembers(m.r80, this.dsB)}</span>
 									</div>

@@ -118,6 +118,7 @@ Matched Pairs Panel {
 			Show all of the matched pairs along with criteria at bottom of matched pair on which the were matched and their scores.
 			Show full_names of all people in family of the matched pair.
 			}
+		if points are negative in evidence list, color the text pink.
 		}
 	else if method == "relations" {
 		for each relation that is not match to itself {
