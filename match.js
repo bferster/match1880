@@ -191,9 +191,11 @@ export function calculateScore(set1, set2, mode = 'match', freqMaps = null)     
 			score += 60; details.push(`Exact Last + Fuzzy First (${jwFirst.toFixed(2)})`);
 			nameMatched = true;
 		}
+		else if ((s.first1.length === 1 || s.first2.length === 1) && s.first1.charAt(0) === s.first2.charAt(0) && s.first1) {
+			score += 40; details.push("Exact Last + 1-Letter First Initial");
+		}
 		else if (s.first1.charAt(0) === s.first2.charAt(0) && s.first1) {
-			score += 40; details.push("Exact Last + First Initial");
-			// Initial match is partial, maybe not full weight for freq mod
+			score += 20; details.push("Exact Last + First Initial");
 		}
 	}
 	else {

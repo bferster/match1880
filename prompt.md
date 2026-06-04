@@ -7,47 +7,14 @@ THE DATASETS {
 		the verified 1870 list, accessed from Google Sheets at:https://docs.google.com/spreadsheets/d/1F1v6NVQ_McESktbHSlH4MsWsUHG0QtMpMRsI_3wAleA
 		the 1880 US census, accessed from  Google Sheets at:https://docs.google.com/spreadsheets/d/1K9DA3aoXkU_Yicts8Umtr92N9Hug3cdeTHcUN1gDf4E
 		load them into memory.
-		name the verified 1870 list the "dataVerified".
+		name the verified 1870 list the "data1870".
 		name the 1880 US census the "data1880".
 		}
 
-	Data in dataVerified dataset {
+	Data in data1870 dataset {
 		This list derrived the from the 1870 census. It has unique egoids for each person whuich form the basis for matching. It is used to find the matching 1870 rows in the 1880 census. Over time, rows will be added to this list as new unique people are found.
 
-		The following columns represent information about the person in a row. Some columns may be blank. There are also the group of finding aides found in all datasets {
-			1. line - A unique identifier for the row.
-			2. egoid - egoid - unique person id, prefaced by county (i.e. AL3644)
-			3. family - A number used by the enumerator to identify a unique family, in order of visitation.
-			4. full_name - The combination of the first-name, the middle_name, and the last_name separated by spaces. If there are only two words, the first is last_name and and the second is the last_name. If there is only one word, it is only the last_name.
-			5. first_name - The given name.
-			6. middle_name - The middle name or initials.
-			7. last_name - The surname.
-			8. birth_year - The year the person was born. May be inaccurate +/- 5 years.
-			9. gender - The sex of the person. Can be F for female or M for male.
-			10. race - The race of the person. Can be B for Black, W for White, M for Mulatto, C for Chinese, and I for Indian.
-			11. occupation - The work role of the person.
-			12. birth_place - Where the person was born.
-			13. death_year - The year the person died.
-			14. enslavers - The egoid(s) of the person’s enslaver(s)
-			15. maiden_name - The maiden name of the person.
-			16. spouses - The egoid(s) of the spouse(s) of the person.
-			17. mother - The egoid of the mother	
-			18. father - The egoid of the father.	
-			19. uncle - The egoid of the uncle	
-			20. aunt - The egoid of the aunt.	
-			21. grandmother - The egoid of the grandmother 
-			22. grandfather - The egoid of the grandfather 
-			23. siblings - A list of egoids of the siblings.
-			24. niblings - A list of egoids of the nieces and nephews.
-			25. cousins - A list of egoids of the cousins.
-			26. children - A list of egoids of the children.
-			27. grandchildren - A list of egoids of the grandchildren.
-			28. norm_race - race normalized to full name to W or B
-			29. norm_first_name - Abbreviation and nicknames expanded to full name
-			30. nysiis_last_name - NYSIIS encoded last-name
-			31. norm_occupation - Occupations clustered to 21 meta-categories.
-			32. hard_evidence - high confidence in a comma-separated dbid list 
-			33. soft_evidence - medium confidence in a comma-separated dbid list 
+				33. soft_evidence - medium confidence in a comma-separated dbid list 
 			}
 	}
 
@@ -311,3 +278,12 @@ Add a button to save to clipboard {
 Show detailed steps of progress when matching in browser console only. 
 Use a light UI theme.
 Run on port 5500
+
+
+
+Make a new table called confidences, with 1870_line, 1880_line, score and confidence columns
+Add a button to set confidence of a selected match pair
+If clicked, ask user to set a confidence level from 0 to 3.
+When set, add the row with the matched pairs line number and the confidence.
+Show row using console.log
+

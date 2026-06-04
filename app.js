@@ -3,6 +3,7 @@
 import { jaroWinkler, getBlockKeys, calculateScore, buildNameFrequencies } from './match.js';
 import { findRelations } from './relations.js';
 import { generateTriplets } from './triplets.js';
+import { NormalizeSourceData } from './normalize.js';
 
 ///////////////////////////////////////////////////////////////////////////////
 // APP LOGIC
@@ -25,6 +26,9 @@ const App = {
 	tier2: [],
 	tier3: [],
 	currentTab: 1,
+
+	confidences: [],
+	selectedPair: null,
 
 	mode: 'match',
 	dsA: [], dsB: [],
@@ -60,11 +64,11 @@ const App = {
 		this.log("Loading datasets in background...");
 
 		Promise.all([
-			this.fetchCSV('https://docs.google.com/spreadsheets/d/1F1v6NVQ_McESktbHSlH4MsWsUHG0QtMpMRsI_3wAleA/export?format=csv'), // Verified
+			this.fetchCSV('https://docs.google.com/spreadsheets/d/1BvrDE7-hJ-qUnTlZXw4fX1AcphGtdYjr9opJy2d-5Hg/export?format=csv'), // Verified
 			this.fetchCSV('https://docs.google.com/spreadsheets/d/1K9DA3aoXkU_Yicts8Umtr92N9Hug3cdeTHcUN1gDf4E/export?format=csv')  // 1880
 		]).then(results => {
-			this.dataVerified = results[0];
-			this.data1880 = results[1];
+			this.dataVerified = results[0].map(r => NormalizeSourceData(r));       // Normalize verified
+			this.data1880 = results[1].map(r => NormalizeSourceData(r));           // Normalize 1880
 
 			// Build Index Maps
 			this.dataVerified.forEach((r, i) => this.mapVerified.set(String(r.line), i));
@@ -88,6 +92,11 @@ const App = {
 			this.mode = $('#sel-mode').val();
 			this.log(`Starting process in mode: ${this.mode}`);
 
+			this.selectedPair = null;
+			$('#confidence-container').addClass('hidden');
+			$('#btn-save').addClass('hidden');
+			$('#btn-save-confidences').addClass('hidden');
+
 			$('#progress-container').removeClass('hidden');
 			// Hide previous results if any
 			$('#results-panel').addClass('hidden');
@@ -107,6 +116,31 @@ const App = {
 
 			setTimeout(() => this.startBlocking(), 100);
 		});
+
+		$('input[name="confidence-opt"]').on('change', (e) => {                     // RADIO ON CHANGE
+			if (!this.selectedPair) return;                                         // Return if no pair
+			const conf = parseInt($(e.currentTarget).val());                       // Parse int
+			if (isNaN(conf) || conf < 0 || conf > 3) return;
+			const line1870 = this.selectedPair.rVerified.line;
+			const line1880 = this.selectedPair.r80.line;
+			let existing = this.confidences.find(c => c["1870_line"] == line1870 && c["1880_line"] == line1880);
+			if (existing) {
+				existing.confidence = conf;
+				existing.score = this.selectedPair.score;
+				console.log("Confidence row updated:", existing);
+			} else {
+				let row = {
+					"1870_line": line1870,
+					"1880_line": line1880,
+					"score": this.selectedPair.score,
+					"confidence": conf
+				};
+				this.confidences.push(row);
+				console.log("Confidence row added:", row);
+			}
+		});
+
+		$('#btn-save-confidences').on('click', () => this.exportConfidencesCSV());  // HANDLER: SAVE CONFIDENCES
 
 		$('#btn-save').on('click', () => this.exportCSV());                        // HANDLER: SAVE
 
@@ -141,6 +175,34 @@ const App = {
 			const lVer = parseInt($(e.currentTarget).data('lver'));
 			const l80 = parseInt($(e.currentTarget).data('l80'));
 
+			// Find selected pair
+			let pair = this.candidates.find(c => parseInt(c.rVerified.line) === lVer && parseInt(c.r80.line) === l80);
+			if (!pair) {
+				const allCands = [...this.tier1, ...this.tier2, ...this.tier3];
+				pair = allCands.find(c => {
+					const rVer = c.rVerified || c.relation || c.rRelation;
+					const r80 = c.r80 || c.head || c.r1880;
+					return rVer && r80 && parseInt(rVer.line) === lVer && parseInt(r80.line) === l80;
+				});
+			}
+			if (pair) {
+				const rVer = pair.rVerified || pair.relation || pair.rRelation;
+				const r80 = pair.r80 || pair.head || pair.r1880;
+				this.selectedPair = {
+					rVerified: rVer,
+					r80: r80,
+					score: pair.score || 0
+				};
+				// Find existing confidence
+				const existing = this.confidences.find(c => c["1870_line"] == rVer.line && c["1880_line"] == r80.line);
+				if (existing) {
+					$(`input[name="confidence-opt"][value="${existing.confidence}"]`).prop('checked', true);
+				} else {
+					$('input[name="confidence-opt"]').prop('checked', false);
+				}
+				$('#confidence-container').removeClass('hidden');                   // Show confidence container
+			}
+
 			// No shift as requested
 			const lVer_shift = lVer;
 			const l80_shift = l80;
@@ -164,7 +226,7 @@ const App = {
 			header: true,
 			skipEmptyLines: true,
 			complete: (results) => {
-				const data = results.data;
+				const data = results.data.map(r => NormalizeSourceData(r));    // Normalize loaded file
 				if (type === 'verified') {
 					this.dataVerified = data;
 					this.mapVerified = new Map();
@@ -620,6 +682,7 @@ const App = {
 		$('#results-panel').removeClass('hidden');
 		$('#context-panel').removeClass('hidden');
 		$('#btn-save').removeClass('hidden');
+		$('#btn-save-confidences').removeClass('hidden');
 		$('#btn-run').prop('disabled', false);
 		$('#sel-mode').prop('disabled', false);
 
@@ -855,6 +918,24 @@ const App = {
 
 		renderBox(setA, mapA, lVer, '#context-verified');
 		renderBox(setB, mapB, l80, '#context-1880');
+	},
+
+	exportConfidencesCSV: function ()                                              // EXPORT CONFIDENCES CSV
+	{
+		this.log("Exporting Confidences...");
+		if (this.confidences.length === 0) {
+			alert("No confidences set yet.");
+			return;
+		}
+		const csv = Papa.unparse(this.confidences);
+		const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+		const link = document.createElement("a");
+		const url = URL.createObjectURL(blob);
+		link.setAttribute("href", url);
+		link.setAttribute("download", "confidences.csv");
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
 	},
 
 	exportCSV: function ()                                                         // EXPORT

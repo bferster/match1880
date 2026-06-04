@@ -5,7 +5,7 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Verité Census Explorer</title>
-	<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
 	<link rel="stylesheet" href="style.css">
 	<style>
 		/* Add specific styles for this layout if not in style.css */
@@ -96,6 +96,7 @@
 					</select>
 					<button id="btn-run" class="btn primary" disabled>Start</button>
 					<button id="btn-save" class="btn success hidden" style="margin-left:8px">Save changes</button>
+					<button id="btn-save-confidences" class="btn primary hidden" style="margin-left:8px">Save confidences</button>
 				</div>
 				<label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
 					<input type="checkbox" id="chk-boost" checked>
@@ -126,7 +127,14 @@
 		<div id="results-panel" class="card hidden">
 			<div class="results-header" style="display: flex; justify-content: space-between; align-items: center;">
 				<h3>Matched Pairs</h3>
-				<div class="search-box" style="display: flex; gap: 8px;">
+				<div class="search-box" style="display: flex; gap: 8px; align-items: center;">
+					<div id="confidence-container" class="hidden" style="display: flex; align-items: center; gap: 8px; margin-right: 8px; font-size: 0.95rem;">
+						<span style="font-weight: 500;">Confidence:</span>
+						<label style="cursor: pointer;"><input type="radio" name="confidence-opt" value="0"> 0</label>
+						<label style="cursor: pointer;"><input type="radio" name="confidence-opt" value="1"> 1</label>
+						<label style="cursor: pointer;"><input type="radio" name="confidence-opt" value="2"> 2</label>
+						<label style="cursor: pointer;"><input type="radio" name="confidence-opt" value="3"> 3</label>
+					</div>
 					<input type="text" id="inp-search" placeholder="Search..."
 						style="padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
 					<button id="btn-search" class="btn primary"
