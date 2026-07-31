@@ -327,3 +327,30 @@ h1 {
 	border: 2px solid var(--primary);
 	background-color: #fff9c4 !important;
 }
+
+.el-modal {        position:fixed; top:0; left:0; width:100%; height:100%;
+                   background:rgba(0,0,0,0.5); display:none; justify-content:center;
+                   align-items:center; z-index:10000; backdrop-filter:blur(4px);
+                   }
+.el-dialog {       background:#fff; border-radius:8px; width:450px; max-width:90%;
+                   box-shadow:0 10px 25px rgba(0,0,0,0.2); border:1px solid #e2e8f0;
+                   display:flex; flex-direction:column; overflow:hidden;
+                   }
+.el-dialog-hdr {   padding:16px 20px; border-bottom:1px solid #e2e8f0; display:flex;
+                   justify-content:space-between; align-items:center; background:#f8fafc;
+                   }
+.el-dialog-hdr h3 { margin:0; font-size:1.15rem; color:#0f172a;
+                   }
+.el-dialog-body {  padding:20px; max-height:400px; overflow-y:auto;
+                   }
+.el-dialog-ftr {   padding:12px 20px; border-top:1px solid #e2e8f0; display:flex;
+                   justify-content:flex-end; gap:8px; background:#f8fafc;
+                   }
+.el-option-grp {   margin-bottom:16px;
+                   }
+.el-option-grp-title { font-weight:600; font-size:0.9rem; margin-bottom:8px; color:#475569;
+                   }
+.el-checkbox-label { display:flex; align-items:center; gap:8px; margin-bottom:8px; cursor:pointer; font-size:0.95rem;
+                   }
+.el-radio-label {  display:flex; align-items:center; gap:8px; margin-bottom:6px; cursor:pointer; font-size:0.95rem;
+                   }

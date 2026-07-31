@@ -339,6 +339,9 @@ export function NormalizeSourceData(record)                                    /
 		if (!r.middle_name) r.middle_name = parsed.middle_name;
 		if (!r.last_name && r.last_name !== '') r.last_name = parsed.last_name;
 	}
+	if (!r.full_name && (r.first_name || r.last_name)) {                       // Construct full_name if missing
+		r.full_name = [r.first_name, r.middle_name, r.last_name].filter(Boolean).join(' '); // Join names
+	}
 
 	for (let key in r) {
 		let val = r[key];

@@ -39,3 +39,12 @@ Logic is shared but typically runs with higher tier thresholds in `app.js`:
 - Tier 3: 130-139
 
 (Note: Self-matches and reverse-duplicates are filtered in `app.js` loop).
+
+## 4. Household Context Boosting (Phase 5 in `app.js`)
+After resolving anchors, the system evaluates household context to boost the score of candidates.
+**Context Bonuses:**
+- **Head Match**: +20
+- **Spouse Match**: +20
+- **Child Match**: +10 per child
+- **Parent Match**: +15
+- **Co-residence**: +20 per additional matched household member

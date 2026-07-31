@@ -10,6 +10,9 @@
 		- Create a new field name that is the same as the field name but with "nysiis_" prepended to it.
 			- i.e. "last_name" becomes 	"nysiis_last_name", "owner_last_name" becomes "nysiis_owner_last_name".	
 		- Use the NYSIIS algorithm to encode the value and store that value in the new field.
+		- Create a new field name that is the same as the field name but with "soundex_	" prepended to it.
+			- i.e. "last_name" becomes 	"soundex_last_name", "owner_last_name" becomes "soundex_owner_last_name".	
+		- Use the soundex algorithm to encode the value and store that value in the new field.
 		}
 	
 	If the field name to be normalized contains the string "first_name" {
@@ -89,6 +92,42 @@
 			H is removed if the preceding or following character is not a vowel.
 			W is removed if the preceding character is a vowel.
 		Collapse all duplicate consecutive characters (e.g., AA becomes A).
+
+
+**SOUNDEX ALGORITHM**
+
+	American (NARA) Soundex: returns a 4-char code, 1 letter + 3 digits.
+
+		function GetSoundex(string) {
+			if (!string) return "";
+			const s = string.toUpperCase().replace(/[^A-Z]/g, "");
+			if (s.length === 0) return "";
+			const codes = {
+				B: "1", F: "1", P: "1", V: "1",
+				C: "2", G: "2", J: "2", K: "2", Q: "2", S: "2", X: "2", Z: "2",
+				D: "3", T: "3",
+				L: "4",
+				M: "5", N: "5",
+				R: "6"
+			};
+
+			let result = s[0];
+			let prevCode = codes[s[0]] || "";   // first letter's code suppresses an identical-coded 2nd letter
+			for (let i = 1; i < s.length && result.length < 4; i++) {
+				const ch = s[i];
+				const code = codes[ch];
+				if (code) {  // a coded consonant
+					if (code !== prevCode) result += code;
+					prevCode = code;
+				} 
+				else if (ch === "H" || ch === "W") {
+					// transparent: do NOT reset prevCode, so same-coded consonants across H/W collapse
+				} else {
+					prevCode = "";  // vowel or Y separates, so repeats get coded twice
+				}
+			}
+		return (result + "000").slice(0, 4);
+	}
 	
 **OCCUPATION ALGORITHM**
 

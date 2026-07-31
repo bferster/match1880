@@ -138,8 +138,20 @@ export function getNameWeightModifier(name, freqMap)                           /
 	return 0; // Fallback
 }
 
-export function calculateScore(set1, set2, mode = 'match', freqMaps = null)      // SCORE CANDIDATE PAIR
+export function calculateScore(set1, set2, mode = 'match', freqMaps = null, matchOptions = null)      // SCORE CANDIDATE PAIR
 {
+	const opt = matchOptions || {
+		felengi: true,
+		exactName: true,
+		nysiis: true,
+		nickname: true,
+		soundex: false,
+		occupation: true,
+		gender: true,
+		race: true,
+		birthYearLimit: '2'
+	};
+
 	let score = 0;
 	const details = [];
 	const get = (r, f) => (r[f] || '').toString().trim().replace(/\s+/g, ' ').toUpperCase();
@@ -157,22 +169,39 @@ export function calculateScore(set1, set2, mode = 'match', freqMaps = null)     
 		norm1: norm(set1.norm_first_name), norm2: norm(set2.norm_first_name),
 		by1: val(set1, 'birth_year'), by2: val(set2, 'birth_year'),
 		gen1: get(set1, 'gender'), gen2: get(set2, 'gender'),
-		race1: get(set1, 'race'), race2: get(set2, 'race'),
+		race1: get(set1, 'norm_race') || get(set1, 'race'), race2: get(set2, 'norm_race') || get(set2, 'race'),
 		bpl1: get(set1, 'birth_place'), bpl2: get(set2, 'birth_place'),
 		nysiis_last1: get(set1, 'nysiis_last_name'), nysiis_last2: get(set2, 'nysiis_last_name'),
 		nysiis_first1: get(set1, 'nysiis_first_name'), nysiis_first2: get(set2, 'nysiis_first_name'),
 		norm_occ1: get(set1, 'norm_occupation'), norm_occ2: get(set2, 'norm_occupation'),
 	};
 
+	const byDiff = Math.abs(s.by1 - s.by2);
+
+	// --- BIRTH YEAR CONSTRAINT ---
+	if (s.by1 && s.by2) {
+		let allowed = true;
+		if (opt.birthYearLimit === 'exact' && byDiff !== 0) allowed = false;
+		else if (opt.birthYearLimit === '1' && byDiff > 1) allowed = false;
+		else if (opt.birthYearLimit === '2' && byDiff > 2) allowed = false;
+		else if (opt.birthYearLimit === '3' && byDiff > 3) allowed = false;
+		else if (opt.birthYearLimit === '5' && byDiff > 5) allowed = false;
+		else if (opt.birthYearLimit === '10' && byDiff > 10) allowed = false;
+
+		if (!allowed) {
+			return { score: 0, details: "Birth Year Out of Range" };
+		}
+	}
+
 	let nameMatched = false;
 
 	// --- NAME MATCH ---
 
-	if (s.full1 === s.full2 && s.full1) {
+	if (opt.exactName && s.full1 === s.full2 && s.full1) {
 		score += 100; details.push("Exact Full");
 		nameMatched = true;
 	}
-	else if (s.last1 === s.last2 && s.first1 === s.first2 && s.last1) {
+	else if (opt.exactName && s.last1 === s.last2 && s.first1 === s.first2 && s.last1) {
 		// Exact Last & Exact First
 		if (!s.mid1 && !s.mid2) {
 			score += 80; details.push("Exact First/Last (No Mid)");
@@ -181,7 +210,7 @@ export function calculateScore(set1, set2, mode = 'match', freqMaps = null)     
 		}
 		nameMatched = true;
 	}
-	else if (s.last1 === s.last2 && s.norm1 === s.norm2 && s.last1) {
+	else if (opt.nickname && s.last1 === s.last2 && s.norm1 === s.norm2 && s.last1) {
 		score += 70; details.push("Exact Last + Norm First");
 		nameMatched = true;
 	}
@@ -205,12 +234,21 @@ export function calculateScore(set1, set2, mode = 'match', freqMaps = null)     
 		}
 	}
 
+	// --- SOUNDEX ---
+	if (opt.soundex) {
+		const soundex_last1 = get(set1, 'soundex_last_name');
+		const soundex_last2 = get(set2, 'soundex_last_name');
+		if (soundex_last1 === soundex_last2 && soundex_last1) {
+			score += 15; details.push("Soundex Last Match");
+		}
+	}
+
 	// --- COMMON NAME COMPENSATION ---
 	// "If the first_name is matched in the Name_match phase..."
 	// We'll apply if we have a decided 'nameMatched' OR high fuzzy first match
 	// Simplification: Apply if we added positive score for name
 
-	if (freqMaps) {
+	if (opt.felengi && freqMaps) {
 		// Only apply modifiers if we have some name match foundation
 		if (score > 0) {
 			const modF = getNameWeightModifier(s.first1, freqMaps.firstNameFreq);
@@ -223,14 +261,13 @@ export function calculateScore(set1, set2, mode = 'match', freqMaps = null)     
 
 	// --- BIRTH YEAR ---
 
-	const byDiff = Math.abs(s.by1 - s.by2);
 	if (s.by1 === s.by2 && s.by1) { score += 50; details.push("Exact BY"); }
 	else if (s.by1 && s.by2 && byDiff <= 2) { score += 30; details.push("BY +/- 2"); }
 	else if (s.by1 && s.by2 && byDiff <= 5) { score += 5; details.push("BY +/- 5"); }
 
 	// --- OCCUPATION ---
 
-	if (s.norm_occ1 === s.norm_occ2 && s.norm_occ1) { score += 10; details.push("Occupation Match"); }
+	if (opt.occupation && s.norm_occ1 === s.norm_occ2 && s.norm_occ1) { score += 10; details.push("Occupation Match"); }
 
 	// --- RACE ---
 	// (No positive points added for race match)
@@ -238,7 +275,7 @@ export function calculateScore(set1, set2, mode = 'match', freqMaps = null)     
 
 	// --- PENALTIES ---
 
-	if (s.gen1 !== s.gen2 && s.gen1 && s.gen2) { score -= 200; details.push("Gender Mismatch"); }
+	if (opt.gender && s.gen1 !== s.gen2 && s.gen1 && s.gen2) { score -= 200; details.push("Gender Mismatch"); }
 
 	if (s.by1 && s.by2) {
 		if (s.by2 < s.by1 && mode === 'match') { // 1880 < 1870
@@ -255,10 +292,10 @@ export function calculateScore(set1, set2, mode = 'match', freqMaps = null)     
 		score -= 50; details.push("Contradictory BPL");
 	}
 
-	if (s.nysiis_last1 !== s.nysiis_last2 && s.nysiis_last1) { score -= 100; details.push("NYSIIS Last Mismatch"); }
-	if (s.nysiis_first1 !== s.nysiis_first2 && s.nysiis_first1) { score -= 40; details.push("NYSIIS First Mismatch"); }
+	if (opt.nysiis && s.nysiis_last1 !== s.nysiis_last2 && s.nysiis_last1) { score -= 100; details.push("NYSIIS Last Mismatch"); }
+	if (opt.nysiis && s.nysiis_first1 !== s.nysiis_first2 && s.nysiis_first1) { score -= 40; details.push("NYSIIS First Mismatch"); }
 
-	if (s.race1 && s.race2) {
+	if (opt.race && s.race1 && s.race2) {
 		if ((s.race1 === 'W' && (s.race2 === 'B' || s.race2 === 'M')) ||
 			(s.race2 === 'W' && (s.race1 === 'B' || s.race1 === 'M'))) {
 			score -= 50; details.push("Race Mismatch (B/M vs W)");

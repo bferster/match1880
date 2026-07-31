@@ -1,8 +1,4 @@
-// Imports removed to rely on Global CDN scripts (Vanilla JS/jQuery compatible)
-
 import { jaroWinkler, getBlockKeys, calculateScore, buildNameFrequencies } from './match.js';
-import { findRelations } from './relations.js';
-import { generateTriplets } from './triplets.js';
 import { NormalizeSourceData } from './normalize.js';
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -37,6 +33,23 @@ const App = {
 	searchIndex: -1,
 	searchTerm: '',
 
+	matchOptions: {
+		felengi: true,
+		exactName: true,
+		nysiis: true,
+		nickname: true,
+		soundex: true,
+		occupation: true,
+		gender: true,
+		race: true,
+		head: true,
+		spouse: true,
+		child: true,
+		parent: true,
+		household: true,
+		birthYearLimit: 'any'
+	},
+
 	log: function (msg)                                                            // LOG
 	{
 		// Console only log as requested
@@ -60,12 +73,11 @@ const App = {
 	init: function ()                                                              // INITIALIZE
 	{
 		app = this;
-		this.log("Application initialized on port 5500.");
 		this.log("Loading datasets in background...");
 
 		Promise.all([
-			this.fetchCSV('https://docs.google.com/spreadsheets/d/1BvrDE7-hJ-qUnTlZXw4fX1AcphGtdYjr9opJy2d-5Hg/export?format=csv'), // Verified
-			this.fetchCSV('https://docs.google.com/spreadsheets/d/1K9DA3aoXkU_Yicts8Umtr92N9Hug3cdeTHcUN1gDf4E/export?format=csv')  // 1880
+			this.fetchCSV('https://docs.google.com/spreadsheets/d/11NG2LSYdk8rW83vn0J9AUZcg5xw7TXbLYvPPvMrbIyk/export?format=csv'), // Verified
+			this.fetchCSV('https://docs.google.com/spreadsheets/d/1W4Z4mu9LqnrxUhpAi5r2nxJgNFW2HLUhMbAohDzR7Qo/export?format=csv')  // 1880
 		]).then(results => {
 			this.dataVerified = results[0].map(r => NormalizeSourceData(r));       // Normalize verified
 			this.data1880 = results[1].map(r => NormalizeSourceData(r));           // Normalize 1880
@@ -86,48 +98,30 @@ const App = {
 
 
 		$('#btn-run').on('click', () => {                                          // HANDLER: RUN
-			$('#btn-run').prop('disabled', true);
-			$('#sel-mode').prop('disabled', true);
-
-			this.mode = $('#sel-mode').val();
-			this.log(`Starting process in mode: ${this.mode}`);
-
-			this.selectedPair = null;
-			$('#confidence-container').addClass('hidden');
-			$('#btn-save').addClass('hidden');
-			$('#btn-save-confidences').addClass('hidden');
-
-			$('#progress-container').removeClass('hidden');
-			// Hide previous results if any
-			$('#results-panel').addClass('hidden');
-			$('#context-panel').addClass('hidden');
-
-			// Update UI Labels based on mode
-			if (this.mode === 'dedup') {
-				$('#ctx-head-top').text('Verified Record A (±12 Rows)');
-				$('#ctx-head-btm').text('Verified Record B (±12 Rows)');
-			} else if (this.mode === 'relations') {
-				$('#ctx-head-top').text('Relation Details');
-				$('#ctx-head-btm').text('1880 Head of Household');
-			} else {
-				$('#ctx-head-top').text('Verified Census Context (±12 Rows)');
-				$('#ctx-head-btm').text('1880 Census Context (±12 Rows)');
-			}
-
-			setTimeout(() => this.startBlocking(), 100);
+			$('#btn-run').prop('disabled', true);                                  // Disable button
+			this.selectedPair = null;                                                // Clear selected
+			$('#confidence-container').addClass('hidden');                         // Hide confidence
+			$('#btn-save').addClass('hidden');                                     // Hide save
+			$('#btn-save-confidences').addClass('hidden');                         // Hide save conf
+			$('#progress-container').removeClass('hidden');                        // Show progress
+			$('#results-panel').addClass('hidden');                                // Hide results
+			$('#context-panel').addClass('hidden');                                // Hide context
+			$('#ctx-head-top').text('Verified Census Context (±12 Rows)');         // Top context label
+			$('#ctx-head-btm').text('1880 Census Context (±12 Rows)');             // Bottom context label
+			setTimeout(() => this.startBlocking(), 100);                             // Start blocking
 		});
 
-		$('input[name="confidence-opt"]').on('change', (e) => {                     // RADIO ON CHANGE
-			if (!this.selectedPair) return;                                         // Return if no pair
-			const conf = parseInt($(e.currentTarget).val());                       // Parse int
-			if (isNaN(conf) || conf < 0 || conf > 3) return;
-			const line1870 = this.selectedPair.rVerified.line;
-			const line1880 = this.selectedPair.r80.line;
-			let existing = this.confidences.find(c => c["1870_line"] == line1870 && c["1880_line"] == line1880);
+		$('input[name="confidence-opt"]').on('change', (e) => {                    // RADIO ON CHANGE
+			if (!this.selectedPair) return;                                        // Return if no pair
+			const conf = parseInt($(e.currentTarget).val());                         // Parse int
+			if (isNaN(conf) || conf < 0 || conf > 3) return;                       // Range check
+			const line1870 = this.selectedPair.rVerified.line;                       // 1870 line
+			const line1880 = this.selectedPair.r80.line;                             // 1880 line
+			let existing = this.confidences.find(c => c["1870_line"] == line1870 && c["1880_line"] == line1880); // Find existing
 			if (existing) {
-				existing.confidence = conf;
-				existing.score = this.selectedPair.score;
-				console.log("Confidence row updated:", existing);
+				existing.confidence = conf;                                          // Update confidence
+				existing.score = this.selectedPair.score;                            // Update score
+				console.log("Confidence row updated:", existing);                  // Log update
 			} else {
 				let row = {
 					"1870_line": line1870,
@@ -135,83 +129,106 @@ const App = {
 					"score": this.selectedPair.score,
 					"confidence": conf
 				};
-				this.confidences.push(row);
-				console.log("Confidence row added:", row);
+				this.confidences.push(row);                                        // Add to list
+				console.log("Confidence row added:", row);                         // Log add
 			}
 		});
 
 		$('#btn-save-confidences').on('click', () => this.exportConfidencesCSV());  // HANDLER: SAVE CONFIDENCES
-
 		$('#btn-save').on('click', () => this.exportCSV());                        // HANDLER: SAVE
-
 		$('.tab-btn').on('click', (e) => {                                         // HANDLER: TAB
-			const t = $(e.currentTarget).data('tab');
-			this.switchTab(t);
+			const t = $(e.currentTarget).data('tab');                                // Get tab
+			this.switchTab(t);                                                     // Switch tab
+		});
+
+		$('#btn-options').on('click', () => {                                      // ON OPTIONS CLICK
+			$('#chk-opt-felengi').prop('checked', this.matchOptions.felengi);      // Set felengi
+			$('#chk-opt-exactname').prop('checked', this.matchOptions.exactName);  // Set exactName
+			$('#chk-opt-nysiis').prop('checked', this.matchOptions.nysiis);        // Set nysiis
+			$('#chk-opt-nickname').prop('checked', this.matchOptions.nickname);    // Set nickname
+			$('#chk-opt-soundex').prop('checked', this.matchOptions.soundex);      // Set soundex
+			$('#chk-opt-occupation').prop('checked', this.matchOptions.occupation);// Set occupation
+			$('#chk-opt-gender').prop('checked', this.matchOptions.gender);        // Set gender
+			$('#chk-opt-race').prop('checked', this.matchOptions.race);            // Set race
+			$('#chk-opt-head').prop('checked', this.matchOptions.head);            // Set head
+			$('#chk-opt-spouse').prop('checked', this.matchOptions.spouse);        // Set spouse
+			$('#chk-opt-child').prop('checked', this.matchOptions.child);          // Set child
+			$('#chk-opt-parent').prop('checked', this.matchOptions.parent);        // Set parent
+			$('#chk-opt-household').prop('checked', this.matchOptions.household);  // Set household
+			$(`input[name="rad-opt-by"][value="${this.matchOptions.birthYearLimit}"]`).prop('checked', true); // Set birthYear
+			$('#el-options-modal').css('display', 'flex');                         // Show modal
+		});
+
+		$('#el-options-close, #el-options-cancel').on('click', () => {             // ON CLOSE/CANCEL
+			$('#el-options-modal').hide();                                         // Hide modal
+		});
+
+		$('#el-options-modal').on('click', (e) => {                                // ON MODAL BG CLICK
+			if (e.target === e.currentTarget) $('#el-options-modal').hide();       // Hide if bg
+		});
+
+		$('#el-options-toggle-all').on('click', () => {                            // ON TOGGLE ALL
+			const $chks = $('#el-options-modal input[type="checkbox"]');             // Get checkboxes
+			const allChecked = $chks.filter(':checked').length === $chks.length;     // Check state
+			$chks.prop('checked', !allChecked);                                    // Toggle state
+		});
+
+		$('#el-options-save').on('click', () => {                                  // ON SAVE OPTIONS
+			this.matchOptions.felengi = $('#chk-opt-felengi').is(':checked');        // Read felengi
+			this.matchOptions.exactName = $('#chk-opt-exactname').is(':checked');    // Read exactName
+			this.matchOptions.nysiis = $('#chk-opt-nysiis').is(':checked');          // Read nysiis
+			this.matchOptions.nickname = $('#chk-opt-nickname').is(':checked');      // Read nickname
+			this.matchOptions.soundex = $('#chk-opt-soundex').is(':checked');        // Read soundex
+			this.matchOptions.occupation = $('#chk-opt-occupation').is(':checked');  // Read occupation
+			this.matchOptions.gender = $('#chk-opt-gender').is(':checked');          // Read gender
+			this.matchOptions.race = $('#chk-opt-race').is(':checked');              // Read race
+			this.matchOptions.head = $('#chk-opt-head').is(':checked');              // Read head
+			this.matchOptions.spouse = $('#chk-opt-spouse').is(':checked');          // Read spouse
+			this.matchOptions.child = $('#chk-opt-child').is(':checked');            // Read child
+			this.matchOptions.parent = $('#chk-opt-parent').is(':checked');          // Read parent
+			this.matchOptions.household = $('#chk-opt-household').is(':checked');    // Read household
+			this.matchOptions.birthYearLimit = $('input[name="rad-opt-by"]:checked').val(); // Read birthYear
+			$('#el-options-modal').hide();                                         // Hide modal
 		});
 
 		$('#btn-search').on('click', () => this.findNext());                       // HANDLER: SEARCH
-		$('#inp-search').on('keypress', (e) => {
-			if (e.which === 13) this.findNext();
+		$('#inp-search').on('keypress', (e) => {                                   // SEARCH KEYPRESS
+			if (e.which === 13) this.findNext();                                   // Enter key
 		});
 
-
-
-		// Delegation for match item clicks
-		// Delegation for match item clicks
-		$('#st-verified').on('click', () => $('#file-verified').trigger('click'));         // CLICK Verified
+		$('#st-verified').on('click', () => $('#file-verified').trigger('click')); // CLICK Verified
 		$('#st-1880').on('click', () => $('#file-1880').trigger('click'));         // CLICK 1880
 
-		$('#file-verified').on('change', (e) => this.loadLocalFile(e, 'verified'));          // LOAD Verified
+		$('#file-verified').on('change', (e) => this.loadLocalFile(e, 'verified')); // LOAD Verified
 		$('#file-1880').on('change', (e) => this.loadLocalFile(e, 1880));          // LOAD 1880
 
-		$('#sel-mode').on('change', () => $('#btn-run').trigger('click'));         // AUTO RUN ON MODE CHANGE
-
 		$(document).on('click', '.match-item', (e) => {                            // HANDLER: MATCH CLICK
-			// Visual feedback
-			$('.match-item').removeClass('active-match');
-			$(e.currentTarget).css('background-color', '#eff6ff');
-
-			// Get original lines
-			const lVer = parseInt($(e.currentTarget).data('lver'));
-			const l80 = parseInt($(e.currentTarget).data('l80'));
-
-			// Find selected pair
-			let pair = this.candidates.find(c => parseInt(c.rVerified.line) === lVer && parseInt(c.r80.line) === l80);
+			$('.match-item').removeClass('active-match');                          // Clear active class
+			$(e.currentTarget).css('background-color', '#eff6ff');                 // Highlight row
+			const lVer = parseInt($(e.currentTarget).data('lver'));                  // Verified line
+			const l80 = parseInt($(e.currentTarget).data('l80'));                    // 1880 line
+			let pair = this.candidates.find(c => parseInt(c.rVerified.line) === lVer && parseInt(c.r80.line) === l80); // Find pair
 			if (!pair) {
-				const allCands = [...this.tier1, ...this.tier2, ...this.tier3];
-				pair = allCands.find(c => {
-					const rVer = c.rVerified || c.relation || c.rRelation;
-					const r80 = c.r80 || c.head || c.r1880;
-					return rVer && r80 && parseInt(rVer.line) === lVer && parseInt(r80.line) === l80;
-				});
+				const allCands = [...this.tier1, ...this.tier2, ...this.tier3];     // All tiers
+				pair = allCands.find(c => c.rVerified && c.r80 && parseInt(c.rVerified.line) === lVer && parseInt(c.r80.line) === l80); // Find match
 			}
 			if (pair) {
-				const rVer = pair.rVerified || pair.relation || pair.rRelation;
-				const r80 = pair.r80 || pair.head || pair.r1880;
-				this.selectedPair = {
-					rVerified: rVer,
-					r80: r80,
+				this.selectedPair = {                                                // Save selected
+					rVerified: pair.rVerified,
+					r80: pair.r80,
 					score: pair.score || 0
 				};
-				// Find existing confidence
-				const existing = this.confidences.find(c => c["1870_line"] == rVer.line && c["1880_line"] == r80.line);
+				const existing = this.confidences.find(c => c["1870_line"] == pair.rVerified.line && c["1880_line"] == pair.r80.line); // Find existing
 				if (existing) {
-					$(`input[name="confidence-opt"][value="${existing.confidence}"]`).prop('checked', true);
+					$(`input[name="confidence-opt"][value="${existing.confidence}"]`).prop('checked', true); // Check confidence
 				} else {
-					$('input[name="confidence-opt"]').prop('checked', false);
+					$('input[name="confidence-opt"]').prop('checked', false);      // Clear confidence
 				}
-				$('#confidence-container').removeClass('hidden');                   // Show confidence container
+				$('#confidence-container').removeClass('hidden');                  // Show confidence UI
 			}
-
-			// No shift as requested
-			const lVer_shift = lVer;
-			const l80_shift = l80;
-
-			// Log to console 
-			console.log(`[Context] Verified Match Line: ${lVer}`);
-			console.log(`[Context] 1880 Match Line: ${l80}`);
-
-			this.showContext(lVer_shift, l80_shift);
+			console.log(`[Context] Verified Match Line: ${lVer}`);                // Log line
+			console.log(`[Context] 1880 Match Line: ${l80}`);                      // Log line
+			this.showContext(lVer, l80);                                           // Show context
 		});
 	},
 
@@ -262,134 +279,63 @@ const App = {
 
 	startBlocking: function ()                                                     // PHASE 1: GENERATE BLOCKS
 	{
-		if (this.mode === 'relations') {
-			findRelations(this);
-			return;
-		}
-
-		if (this.mode === 'triplets') {
-			this.log("Generating Triplets for Semantic Graph...");
-			const ttl = generateTriplets(this.dataVerified);
-			this.log("Triplets generated. Check console for output.");
-			console.log(ttl);
-
-			// Trigger download
-			const blob = new Blob([ttl], { type: 'text/turtle;charset=utf-8;' });
-			const link = document.createElement("a");
-			const url = URL.createObjectURL(blob);
-			link.setAttribute("href", url);
-			link.setAttribute("download", "1870_census_graph.ttl");
-			document.body.appendChild(link);
-			link.click();
-			document.body.removeChild(link);
-
-			alert("Triplets generated! File '1870_census_graph.ttl' downloaded. Check console (F12) for output.");
-			this.progress(100, "Done");
-			$('#btn-run').prop('disabled', false);
-			$('#sel-mode').prop('disabled', false);
-			return;
-		}
-
-		this.log("Phase 1: Blocking...");
-		this.progress(10, "Generating blocks");
-
-		// Set active datasets
-		// Set active datasets
-		if (this.mode === 'dedup') {
-			this.dsA = this.dataVerified;
-			this.dsB = this.dataVerified;                                              // Self match
-			this.mapA = this.mapVerified;
-			this.mapB = this.mapVerified;
-		} else {
-			this.dsA = this.dataVerified;
-			this.dsB = this.data1880;
-			this.mapA = this.mapVerified;
-			this.mapB = this.map1880;
-		}
-
-		// Blocking is fast enough relative to scoring
-		this.blocks = new Map();
-
-		// Dataset A
-		this.dsA.forEach(row => {
-			const keys = getBlockKeys(row);
-			keys.forEach(k => this.addToBlock(k, row, 'verified'));                        // Using 'verified' as "List A"
+		this.log("Phase 1: Blocking...");                                          // Log start
+		this.progress(10, "Generating blocks");                                    // Progress UI
+		this.dsA = this.dataVerified;                                                // dsA is Verified
+		this.dsB = this.data1880;                                                    // dsB is 1880
+		this.mapA = this.mapVerified;                                                // mapA is Verified
+		this.mapB = this.map1880;                                                    // mapB is 1880
+		this.blocks = new Map();                                                     // Reset blocks
+		this.dsA.forEach(row => {                                                    // Loop dsA
+			const keys = getBlockKeys(row);                                          // Block keys
+			keys.forEach(k => this.addToBlock(k, row, 'verified'));                  // Add to block A
 		});
-
-		// Dataset B
-		// In dedup mode, we scan same data again for B list. 
-		// Yes, we will have every item in both lists.
-		this.dsB.forEach(row => {
-			const keys = getBlockKeys(row);
-			keys.forEach(k => this.addToBlock(k, row, 80));                        // Using 80 as "List B"
+		this.dsB.forEach(row => {                                                    // Loop dsB
+			const keys = getBlockKeys(row);                                          // Block keys
+			keys.forEach(k => this.addToBlock(k, row, 80));                          // Add to block B
 		});
-
-		this.log(`Generated ${this.blocks.size} blocks.`);
-		setTimeout(() => this.startScoring(), 100);
+		this.log(`Generated ${this.blocks.size} blocks.`);                         // Log blocks size
+		setTimeout(() => this.startScoring(), 100);                                  // Start scoring
 	},
 
 	addToBlock: function (key, record, type)                                       // ADD TO BLOCK MAP
 	{
 		if (!this.blocks.has(key)) this.blocks.set(key, { listVerified: [], list80: [] });
-		const b = this.blocks.get(key);
-		if (type === 'verified') b.listVerified.push(record);
-		else b.list80.push(record);
+		const b = this.blocks.get(key);                                              // Get block
+		if (type === 'verified') b.listVerified.push(record);                      // Add verified
+		else b.list80.push(record);                                                // Add 1880
 	},
 
 	startScoring: function ()                                                      // PHASE 2: SCORE PAIRS
 	{
-		this.log("Phase 2: Scoring Candidates...");
-		this.progress(30, "Scoring candidates");
-
-		// Build Frequency Maps for 1870 (Verified)
-		if (!this.freqMaps) {
-			this.log("Building Name Frequency Maps...");
-			this.freqMaps = buildNameFrequencies(this.dataVerified);
+		this.log("Phase 2: Scoring Candidates...");                                // Log start
+		this.progress(30, "Scoring candidates");                                   // Progress UI
+		if (!this.freqMaps) {                                                      // Check freqMaps
+			this.log("Building Name Frequency Maps...");                           // Log build
+			this.freqMaps = buildNameFrequencies(this.dataVerified);                 // Build frequencies
 		}
-
-		const blockKeys = Array.from(this.blocks.keys());
-		const totalBlocks = blockKeys.length;
-		const candidateMap = new Map();
-
-		let processed = 0;
-		const CHUNK_SIZE = 1000;                                                   // Process in chunks
-
-		const processChunk = () => {
-			const limit = Math.min(processed + CHUNK_SIZE, totalBlocks);
-
-			for (let i = processed; i < limit; i++) {
-				const key = blockKeys[i];
-				const block = this.blocks.get(key);
-
-				if (block.listVerified.length > 0 && block.list80.length > 0) {
-					for (const rVerified of block.listVerified) {
-						for (const r80 of block.list80) {
-							// If Deduping, skip self-matches and duplicates (A-B vs B-A)
-							// We only want rVerified.line < r80.line
-							if (this.mode === 'dedup') {
-								if (parseInt(rVerified.line) >= parseInt(r80.line)) continue;
-							}
-
-							const pairId = `${rVerified.line}-${r80.line}`;
+		const blockKeys = Array.from(this.blocks.keys());                            // Get keys
+		const totalBlocks = blockKeys.length;                                        // Total count
+		const candidateMap = new Map();                                              // Candidate map
+		let processed = 0;                                                           // Processed count
+		const CHUNK_SIZE = 1000;                                                     // Chunk size
+		const processChunk = () => {                                                   // Chunk processor
+			const limit = Math.min(processed + CHUNK_SIZE, totalBlocks);             // Get limit
+			for (let i = processed; i < limit; ++i) {                                    // Loop chunk
+				const key = blockKeys[i];                                            // Get key
+				const block = this.blocks.get(key);                                  // Get block
+				if (block.listVerified.length > 0 && block.list80.length > 0) {    // Check lists
+					for (const rVerified of block.listVerified) {                  // Loop verified
+						for (const r80 of block.list80) {                          // Loop 1880
+							const pairId = `${rVerified.line}-${r80.line}`;          // Pair ID
 							if (candidateMap.has(pairId)) continue;                // Skip duplicates
-
-							const res = calculateScore(rVerified, r80, this.mode, this.freqMaps);
-
-							let tier = 0;
-							if (this.mode === 'dedup') {
-								// Dedup Tiers: >150 (T1), 140-149 (T2), 130-139 (T3)
-								if (res.score > 150) tier = 1;
-								else if (res.score >= 140) tier = 2;
-								else if (res.score >= 130) tier = 3;
-							} else {
-								// Match Tiers: >100 (T1), 80-99 (T2), 50-79 (T3)
-								if (res.score > 100) tier = 1;
-								else if (res.score >= 80) tier = 2;
-								else if (res.score >= 50) tier = 3;
-							}
-
-							if (tier > 0) {
-								candidateMap.set(pairId, {
+							const res = calculateScore(rVerified, r80, this.mode, this.freqMaps, this.matchOptions); // Score
+							let tier = 0;                                            // Reset tier
+							if (res.score > 100) tier = 1;                           // Tier 1
+							else if (res.score >= 80) tier = 2;                      // Tier 2
+							else if (res.score >= 50) tier = 3;                      // Tier 3
+							if (tier > 0) {                                        // If valid
+								candidateMap.set(pairId, {                         // Save candidate
 									rVerified, r80, score: res.score, details: res.details, tier
 								});
 							}
@@ -397,301 +343,231 @@ const App = {
 					}
 				}
 			}
-
-			processed = limit;
-			const pct = 30 + (processed / totalBlocks) * 40;
+			processed = limit;                                                       // Update count
+			const pct = 30 + (processed / totalBlocks) * 40;                         // Calc percent
 			if (processed % 5000 === 0) this.progress(pct, `Scoring... (${processed}/${totalBlocks})`);
-
-			if (processed < totalBlocks) {
+			if (processed < totalBlocks) {                                         // More chunks?
 				setTimeout(processChunk, 0);                                       // Yield
 			} else {
-				this.candidates = Array.from(candidateMap.values());
-				this.log(`Scored ${this.candidates.length} candidate pairs.`);
-				// Household Boosting Commented out in Skill. Proceed to Resolution directly.
-				setTimeout(() => this.startResolution(), 100);
+				this.candidates = Array.from(candidateMap.values());                 // Save candidates
+				this.log(`Scored ${this.candidates.length} candidate pairs.`);      // Log count
+				setTimeout(() => this.startResolution(), 100);                       // Start resolution
 			}
 		};
-
-		processChunk();
+		processChunk();                                                            // Run chunk
 	},
-
 
 	startResolution: function ()                                                   // PHASE 4: RESOLVE
 	{
-		this.log("Phase 4: Resolving Conflicts & Identifying Anchors...");
-		this.progress(60, "Resolving conflicts");
-
-		// Sort by score descending
-		this.candidates.sort((a, b) => b.score - a.score);
-
-		const usedVerified = new Set();
-		const used80 = new Set();
-
-		// Temporary containers for identification
-		this.tier1 = [];
-		this.tier2 = [];
-
-		for (const cand of this.candidates) {
-			const idVerified = cand.rVerified.line;
-			const id80 = cand.r80.line;
-
-			// One person can match at most ONE person in the other census
-			// In dedup mode, we also want unique pairings. 
-			if (usedVerified.has(idVerified) || used80.has(id80)) continue;                    // Skip duplicates
-
-			usedVerified.add(idVerified);
-			used80.add(id80);
-
-			if (cand.tier === 1) this.tier1.push(cand);
-			else if (cand.tier === 2) this.tier2.push(cand);
+		this.log("Phase 4: Resolving Conflicts & Identifying Anchors...");          // Log start
+		this.progress(60, "Resolving conflicts");                                  // Progress UI
+		this.candidates.sort((a, b) => b.score - a.score);                            // Sort descending
+		const usedVerified = new Set();                                              // Used verified
+		const used80 = new Set();                                                    // Used 1880
+		this.tier1 = [];                                                             // Clear Tier 1
+		this.tier2 = [];                                                             // Clear Tier 2
+		for (const cand of this.candidates) {                                      // Loop candidates
+			const idVerified = cand.rVerified.line;                                  // Verified line
+			const id80 = cand.r80.line;                                              // 1880 line
+			if (usedVerified.has(idVerified) || used80.has(id80)) continue;        // Skip if used
+			usedVerified.add(idVerified);                                          // Mark verified
+			used80.add(id80);                                                      // Mark 1880
+			if (cand.tier === 1) this.tier1.push(cand);                            // Add Tier 1
+			else if (cand.tier === 2) this.tier2.push(cand);                       // Add Tier 2
 		}
-
 		this.log(`Phase 4 Resolved: ${this.tier1.length} Tier 1 and ${this.tier2.length} Tier 2 anchors identified.`);
-
-		// Household boosting only for cross-census match usually, but prompt didn't exclude it.
-		// However, for duplicates within same dataset, household boosting might be valid (whole family duplicated).
-		if ($('#chk-boost').is(':checked') && this.mode !== 'dedup') {
-			setTimeout(() => this.startHouseholdBoosting(), 100);
-		} else {
-			this.log("Skipping Household Context Boosting.");
-			setTimeout(() => this.finalizeResults(), 100);
-		}
+		setTimeout(() => this.startHouseholdBoosting(), 100);                       // Run household boost
 	},
 
 	startHouseholdBoosting: function ()                                            // PHASE 5: HOUSEHOLD BOOST
 	{
-		this.log("Phase 5: Household Context Boosting...");
-		this.progress(80, "Context boosting");
-
-		// 1. Index Households
-		const houseA = new Map();
-		const houseB = new Map();
-
-		// For 1870: dwelling number, fallback to family
-		const getFamKeyA = (r) => r.dwelling || r.family;
-		const getFamKeyB = (r) => r.family;
-
-		this.dsA.forEach(r => {
-			const k = getFamKeyA(r);
-			if (k) {
-				if (!houseA.has(k)) houseA.set(k, []);
-				houseA.get(k).push(r);
+		this.log("Phase 5: Household Context Boosting...");                        // Log start
+		this.progress(80, "Context boosting");                                     // Progress UI
+		const houseA = new Map();                                                    // House map A
+		const houseB = new Map();                                                    // House map B
+		const getFamKeyA = (r) => {                                                    // Get Fam A Key
+			const val = (r.dwelling || r.family || '').toString().trim().toUpperCase(); // Normalize
+			return (val === '' || val === '0' || val === 'U' || val === 'UNKNOWN') ? null : val; // Return null if invalid
+		};
+		const getFamKeyB = (r) => {                                                    // Get Fam B Key
+			const val = (r.family || '').toString().trim().toUpperCase();            // Normalize
+			return (val === '' || val === '0' || val === 'U' || val === 'UNKNOWN') ? null : val; // Return null if invalid
+		};
+		let prevKeyA = null;                                                         // Tracker Fam A
+		let currentHouseIdA = 0;                                                     // ID Tracker A
+		this.dsA.forEach(r => {                                                      // Loop dsA
+			const k = getFamKeyA(r);                                                 // Get key
+			if (k !== prevKeyA) {                                                  // Key changed
+				currentHouseIdA++;                                                 // Increment ID
+				prevKeyA = k;                                                        // Save key
+			}
+			if (!k) {                                                              // If invalid
+				r._houseId = null;                                                   // Set null
+			} else {
+				r._houseId = `A_${currentHouseIdA}`;                                  // Save ID to row
+				if (!houseA.has(r._houseId)) houseA.set(r._houseId, []);           // Init array
+				houseA.get(r._houseId).push(r);                                    // Add to house A
 			}
 		});
-
-		this.dsB.forEach(r => {
-			const k = getFamKeyB(r);
-			if (k) {
-				if (!houseB.has(k)) houseB.set(k, []);
-				houseB.get(k).push(r);
+		let prevKeyB = null;                                                         // Tracker Fam B
+		let currentHouseIdB = 0;                                                     // ID Tracker B
+		this.dsB.forEach(r => {                                                      // Loop dsB
+			const k = getFamKeyB(r);                                                 // Get key
+			if (k !== prevKeyB) {                                                  // Key changed
+				currentHouseIdB++;                                                 // Increment ID
+				prevKeyB = k;                                                        // Save key
+			}
+			if (!k) {                                                              // If invalid
+				r._houseId = null;                                                   // Set null
+			} else {
+				r._houseId = `B_${currentHouseIdB}`;                                  // Save ID to row
+				if (!houseB.has(r._houseId)) houseB.set(r._houseId, []);           // Init array
+				houseB.get(r._houseId).push(r);                                    // Add to house B
 			}
 		});
-
-		// Map to track all candidates
-		const candidateMap = new Map();
+		const candidateMap = new Map();                                              // Candidate map
 		this.candidates.forEach(c => candidateMap.set(`${c.rVerified.line}-${c.r80.line}`, c));
-
-		let boosted = 0;
-
-		// Process every unique household pair derived from candidates
-		const housePairs = new Set();
-		this.candidates.forEach(cand => {
-			const kA = getFamKeyA(cand.rVerified);
-			const kB = getFamKeyB(cand.r80);
-			if (kA && kB) housePairs.add(`${kA}|${kB}`);
+		let boosted = 0;                                                             // Boosted count
+		const housePairs = new Set();                                                // House pairs set
+		this.candidates.forEach(cand => {                                            // Loop cands
+			const hIdA = cand.rVerified._houseId;                                    // House ID A
+			const hIdB = cand.r80._houseId;                                          // House ID B
+			if (hIdA && hIdB) housePairs.add(`${hIdA}|${hIdB}`);                   // Add pair
 		});
-
-		for (const pairKey of housePairs) {
-			const [kA, kB] = pairKey.split('|');
-			const hA = houseA.get(kA) || [];
-			const hB = houseB.get(kB) || [];
-
-			// Find all cross-matches in these two households
-			const localMatches = [];
-
-			hA.forEach(memberA => {
-				hB.forEach(memberB => {
-					if (this.mode === 'dedup' && parseInt(memberA.line) >= parseInt(memberB.line)) return;
-
-					const pairId = `${memberA.line}-${memberB.line}`;
-					let candidate = candidateMap.get(pairId);
-
-					if (!candidate) {
-						const res = calculateScore(memberA, memberB, this.mode, this.freqMaps);
-						candidate = { rVerified: memberA, r80: memberB, score: res.score, details: res.details, tier: 0 };
-						candidateMap.set(pairId, candidate);
+		for (const pairKey of housePairs) {                                        // Loop pairs
+			const [hIdA, hIdB] = pairKey.split('|');                                 // Split key
+			const hA = houseA.get(hIdA) || [];                                       // Get house A
+			const hB = houseB.get(hIdB) || [];                                       // Get house B
+			if (hA.length > 50 || hB.length > 50) continue;                        // Skip huge institutional houses
+			const localMatches = [];                                                 // Local matches
+			hA.forEach(memberA => {                                                  // Loop member A
+				hB.forEach(memberB => {                                              // Loop member B
+					const pairId = `${memberA.line}-${memberB.line}`;                // Pair ID
+					let candidate = candidateMap.get(pairId);                        // Get candidate
+					if (!candidate) {                                              // If none
+						const res = calculateScore(memberA, memberB, this.mode, this.freqMaps, this.matchOptions); // Score
+						candidate = { rVerified: memberA, r80: memberB, score: res.score, details: res.details, tier: 0, _pairId: pairId, _isNew: true };
 					}
-
-					localMatches.push(candidate);
+					localMatches.push(candidate);                                  // Add match
 				});
 			});
-
-			if (localMatches.length === 0) continue;
-
-			let headMatch = false;
-			let spouseMatch = false;
-			let childMatches = 0;
-			let parentMatch = false;
-
-			// Track unique 1880 lines we count as children
-			const countedChildren = new Set();
-
-			// Evaluate relationships based on all matches, regardless of tier or score
-			localMatches.forEach(m => {
-
-				const relB = (m.r80.relation || '').toLowerCase();
-
-				if (relB.includes('head') || relB.includes('self')) {
-					headMatch = true;
+			if (localMatches.length === 0) continue;                               // Skip if empty
+			let headMatch = false;                                                   // Head match flag
+			let spouseMatch = false;                                                 // Spouse match flag
+			let childMatches = 0;                                                    // Child matches count
+			let parentMatch = false;                                                 // Parent match flag
+			const countedChildren = new Set();                                       // Counted children set
+			localMatches.forEach(m => {                                              // Loop matches
+				if (m.score <= 20) return;                                         // Ignore weak/non-matches
+				const relB = (m.r80.relation || '').toLowerCase();                    // Get relation
+				if (relB.includes('head') || relB.includes('self')) {              // Check head
+					headMatch = true;                                                // Set flag
 				}
-				else if (relB.includes('wife')) {
-					spouseMatch = true;
+				else if (relB.includes('wife')) {                                  // Check wife
+					spouseMatch = true;                                              // Set flag
 				}
-				else if (m.rVerified.gender !== m.r80.gender) {
-					const year1 = parseInt(m.rVerified.birth_year) || 1870;
-					const year2 = parseInt(m.r80.birth_year) || 1880;
-
-					const ageDiff = Math.abs(year1 - year2);
-					const age1 = 1870 - year1;
-					const age2 = (this.mode === 'dedup' ? 1870 : 1880) - year2;
-
+				else if (m.rVerified.gender !== m.r80.gender) {                    // Check gender
+					const year1 = parseInt(m.rVerified.birth_year) || 1870;          // Birth 1870
+					const year2 = parseInt(m.r80.birth_year) || 1880;                // Birth 1880
+					const ageDiff = Math.abs(year1 - year2);                         // Age difference
+					const age1 = 1870 - year1;                                       // Age 1870
+					const age2 = 1880 - year2;                                       // Age 1880
 					if (ageDiff <= 5 && age1 > 15 && age2 > 15 && !relB.includes('son') && !relB.includes('dau') && !relB.includes('child')) {
-						spouseMatch = true;
+						spouseMatch = true;                                          // Set flag
 					}
 				}
-
-				if (relB.includes('son') || relB.includes('dau') || relB.includes('child')) {
-					const childYear = parseInt(m.r80.birth_year) || 1880;
-					const childAge = (this.mode === 'dedup' ? 1870 : 1880) - childYear;
-
-					if (childAge > 10 && !countedChildren.has(m.r80.line)) {
-						childMatches++;
-						countedChildren.add(m.r80.line);
+				if (relB.includes('son') || relB.includes('dau') || relB.includes('child')) { // Check child
+					const childYear = parseInt(m.r80.birth_year) || 1880;            // Birth child
+					const childAge = 1880 - childYear;                               // Age child
+					if (childAge > 10 && !countedChildren.has(m.r80.line)) {       // Age cutoff
+						childMatches++;                                            // Increment count
+						countedChildren.add(m.r80.line);                           // Mark child line
 					}
 				}
-
-				if (relB.includes('father') || relB.includes('mother')) {
-					parentMatch = true;
+				if (relB.includes('father') || relB.includes('mother')) {          // Check parent
+					parentMatch = true;                                              // Set flag
 				}
 			});
-
-			let contextBonus = 0;
-			let contextReasons = [];
-
-			if (headMatch) { contextBonus += 20; contextReasons.push("Head Match"); }
-			if (spouseMatch) { contextBonus += 20; contextReasons.push("Spouse Match"); }
-			if (childMatches > 0) { contextBonus += (childMatches * 10); contextReasons.push(`Child Match x${childMatches}`); }
-			if (parentMatch) { contextBonus += 15; contextReasons.push("Parent Match"); }
-
-			const strongMatchingLines80 = new Set();
-			localMatches.forEach(m => {
-				// Consider a match valid for co-residence if score > 20 (it formed a candidate)
-				if (m.score > 20) {
-					strongMatchingLines80.add(m.r80.line);
+			let contextBonus = 0;                                                    // Context bonus
+			let contextReasons = [];                                                 // Reasons array
+			if (this.matchOptions.head && headMatch) { contextBonus += 20; contextReasons.push("Head Match"); } // Head bonus
+			if (this.matchOptions.spouse && spouseMatch) { contextBonus += 20; contextReasons.push("Spouse Match"); } // Spouse bonus
+			if (this.matchOptions.child && childMatches > 0) { contextBonus += (childMatches * 10); contextReasons.push(`Child Match x${childMatches}`); } // Child bonus
+			if (this.matchOptions.parent && parentMatch) { contextBonus += 15; contextReasons.push("Parent Match"); } // Parent bonus
+			const strongMatchingLines80 = new Set();                                 // Strong matches
+			localMatches.forEach(m => {                                              // Loop matches
+				if (m.score > 20) {                                                // Score cutoff
+					strongMatchingLines80.add(m.r80.line);                         // Add line
 				}
 			});
-
-			// Apply the combined household boost to all candidates between hA and hB
-			if (contextBonus > 0 || strongMatchingLines80.size > 0) {
-				localMatches.forEach(candidate => {
-					let thisBonus = contextBonus;
-					let theseReasons = [...contextReasons];
-
-					const isSelfMatched = strongMatchingLines80.has(candidate.r80.line);
-					const otherMatchesCount = Math.max(0, strongMatchingLines80.size - (isSelfMatched ? 1 : 0));
-
-					if (otherMatchesCount > 0) {
-						thisBonus += (otherMatchesCount * 20);
+			if (contextBonus > 0 || strongMatchingLines80.size > 0) {              // Apply boost
+				localMatches.forEach(candidate => {                                  // Loop candidates
+					let thisBonus = contextBonus;                                    // Initial bonus
+					let theseReasons = [...contextReasons];                          // Reasons
+					const isSelfMatched = strongMatchingLines80.has(candidate.r80.line); // Self match?
+					const otherMatchesCount = Math.max(0, strongMatchingLines80.size - (isSelfMatched ? 1 : 0)); // Other count
+					if (this.matchOptions.household && otherMatchesCount > 0) {    // If household match checked
+						thisBonus += (otherMatchesCount * 20);                      // Add bonus
 						theseReasons.push(otherMatchesCount === 1 ? "Co-residence" : `Co-residence x${otherMatchesCount}`);
 					}
-
-					if (thisBonus > 0) {
-						candidate.score += thisBonus;
-						candidate.details += (candidate.details ? ", " : "") + theseReasons.join(", ");
-
-						let newTier = 0;
-						if (this.mode === 'dedup') {
-							if (candidate.score > 150) newTier = 1;
-							else if (candidate.score >= 140) newTier = 2;
-							else if (candidate.score >= 130) newTier = 3;
-						} else {
-							if (candidate.score > 100) newTier = 1;
-							else if (candidate.score >= 80) newTier = 2;
-							else if (candidate.score >= 50) newTier = 3;
-						}
-
-						// Always update tier if it promotes the candidate
-						if (newTier > 0 && (candidate.tier === 0 || newTier < candidate.tier)) {
-							candidate.tier = newTier;
-							boosted++;
-						} else if (newTier > 0 && candidate.tier === 0) {
-							candidate.tier = newTier;
-							boosted++;
+					if (thisBonus > 0) {                                           // If bonus > 0
+						candidate.score += thisBonus;                              // Apply score
+						candidate.details += (candidate.details ? ", " : "") + theseReasons.join(", "); // Add details
+						let newTier = 0;                                             // New tier
+						if (candidate.score > 100) newTier = 1;                      // Tier 1
+						else if (candidate.score >= 80) newTier = 2;                 // Tier 2
+						else if (candidate.score >= 50) newTier = 3;                 // Tier 3
+						if (newTier > 0 && (candidate.tier === 0 || newTier < candidate.tier)) { // Promote tier
+							candidate.tier = newTier;                                // Save tier
+							boosted++;                                             // Increment boosted
+							if (candidate._isNew) {                                // If new candidate
+								candidateMap.set(candidate._pairId, candidate);    // Save to map
+								candidate._isNew = false;                          // Clear flag
+							}
 						}
 					}
 				});
 			}
 		}
-
-		this.log(`Boosted ${boosted} candidates via household context.`);
-		this.candidates = Array.from(candidateMap.values()).filter(c => c.tier > 0);
-
-		setTimeout(() => this.finalizeResults(), 100);
+		this.log(`Boosted ${boosted} candidates via household context.`);          // Log count
+		this.candidates = Array.from(candidateMap.values()).filter(c => c.tier > 0);   // Keep active cands
+		setTimeout(() => this.finalizeResults(), 100);                               // Finalize results
 	},
 
 	finalizeResults: function ()                                                   // RESULTS
 	{
-		this.log("Finalizing Matches...");
-		this.progress(90, "Finalizing");
-
-		this.candidates.sort((a, b) => b.score - a.score);
-		const usedVerified = new Set();
-		const used80 = new Set();
-
-		this.tier1 = [];
-		this.tier2 = [];
-		this.tier3 = [];
-
-		let count = 0;
-		for (const cand of this.candidates) {
-
-			const idVerified = cand.rVerified.line;
-			const id80 = cand.r80.line;
-
-			if (this.mode === 'dedup') {
-				// Dedup: ID space is shared. Ensure unique row usage globally.
-				if (usedVerified.has(idVerified) || usedVerified.has(id80)) continue;
-			}
-			else if (this.mode === 'match') {
-				// Match: Distinct ID spaces.
-				if (usedVerified.has(idVerified) || used80.has(id80)) continue;
-			}
-			usedVerified.add(idVerified);
-			used80.add(id80);
-			if (cand.tier === 1) this.tier1.push(cand);
-			else if (cand.tier === 2) this.tier2.push(cand);
-			else if (cand.tier === 3) this.tier3.push(cand);
-			count++;
+		this.log("Finalizing Matches...");                                         // Log start
+		this.progress(90, "Finalizing");                                           // Progress UI
+		this.candidates.sort((a, b) => b.score - a.score);                            // Sort descending
+		const usedVerified = new Set();                                              // Used verified
+		const used80 = new Set();                                                    // Used 1880
+		this.tier1 = [];                                                             // Clear Tier 1
+		this.tier2 = [];                                                             // Clear Tier 2
+		this.tier3 = [];                                                             // Clear Tier 3
+		let count = 0;                                                               // Count
+		for (const cand of this.candidates) {                                      // Loop candidates
+			const idVerified = cand.rVerified.line;                                  // Verified line
+			const id80 = cand.r80.line;                                              // 1880 line
+			if (usedVerified.has(idVerified) || used80.has(id80)) continue;        // Unique pairings
+			usedVerified.add(idVerified);                                          // Mark verified
+			used80.add(id80);                                                      // Mark 1880
+			if (cand.tier === 1) this.tier1.push(cand);                            // Add Tier 1
+			else if (cand.tier === 2) this.tier2.push(cand);                       // Add Tier 2
+			else if (cand.tier === 3) this.tier3.push(cand);                       // Add Tier 3
+			count++;                                                               // Increment count
 		}
-
-		this.log(`Final count: ${count} unique matches.`);
+		this.log(`Final count: ${count} unique matches.`);                         // Log final count
 		this.log(`Tier 1: ${this.tier1.length}, Tier 2: ${this.tier2.length}, Tier 3: ${this.tier3.length}`);
-
-		this.progress(100, "Done");
-
-		$('#results-panel').removeClass('hidden');
-		$('#context-panel').removeClass('hidden');
-		$('#btn-save').removeClass('hidden');
-		$('#btn-save-confidences').removeClass('hidden');
-		$('#btn-run').prop('disabled', false);
-		$('#sel-mode').prop('disabled', false);
-
-		// Update counts
-		$('#cnt-1').text(this.tier1.length);
-		$('#cnt-2').text(this.tier2.length);
-		$('#cnt-3').text(this.tier3.length);
-
-		this.switchTab(1);
+		this.progress(100, "Done");                                                // Progress UI
+		$('#results-panel').removeClass('hidden');                                 // Show results
+		$('#context-panel').removeClass('hidden');                                 // Show context
+		$('#btn-save').removeClass('hidden');                                      // Show save
+		$('#btn-save-confidences').removeClass('hidden');                          // Show save conf
+		$('#btn-run').prop('disabled', false);                                     // Enable run
+		$('#cnt-1').text(this.tier1.length);                                       // Set Tier 1 count
+		$('#cnt-2').text(this.tier2.length);                                       // Set Tier 2 count
+		$('#cnt-3').text(this.tier3.length);                                       // Set Tier 3 count
+		this.switchTab(1);                                                         // Switch to Tab 1
 	},
 
 	switchTab: function (t)                                                        // SWITCH TAB
@@ -761,96 +637,48 @@ const App = {
 				$list.html('<div style="padding:20px; text-align:center; color:#666">No matches in this tier.</div>');
 			} else {
 				let html = '';
+				data.forEach(m => {
+					let cls = 'score-low';
+					let scoreStyle = 'font-size:1.1em;';
+					if (m.score > 90) cls = 'score-high';
+					else if (m.score >= 80) cls = 'score-med';
+					if (m.score < 0) scoreStyle += ' color: #e11d48;'; // Pink for negative points
+					const detailsHtml = (m.details || '').split(', ').map(d => {
+						let ext = '';
+						const lower = d.toLowerCase();
+						if (lower.includes('mismatch') || lower.includes('gap') || lower.includes('regress') || lower.includes('contradictory') || d.match(/-\d+/)) {
+							ext = ' ev-negative';
+						}
+						return `<span class="ev-tag${ext}">${d}</span>`;
+					}).join('');
 
-				if (this.mode === 'relations') {															// SPECIAL RENDERER FOR RELATIONS
-
-
-					data.forEach(m => {
-						// m.head = 1880 Head Record
-						// m.relation = 1870 Match Record
-						// m.details = "Wife Found", etc.
-
-						const rHead = m.head || m.r1880; // Fallback
-						const rRel = m.relation || m.rRelation;
-
-						if (!rHead) return; // Should not happen
-						// Filter removed to maintain index sync with data. Self-matches filtered at generation.
-
-
-						let cls = 'score-high'; // Relations are usually high confidence by definition of the algo
-
-						html += `
-						<div class="match-item" data-lver="${rRel.line || 0}" data-l80="${rHead.line || 0}">
-                             <div class="match-header">
-                                <span class="badge ${cls}" style="font-size:1.1em">REL</span>
-                            </div>
-                            <div class="match-grid">
-                                <div class="rec">
-                                    <span>1880 Head / Context</span>
-                                    <strong>${rHead.full_name}</strong>
-                                    <span>ID: ${rHead.egoid}</span>
-                                    <span>Age: ${(this.mode === 'dedup' ? 1870 : 1880) - (parseInt(rHead.birth_year) || (this.mode === 'dedup' ? 1870 : 1880))} | ${rHead.occupation}</span>
-                                    <div style="margin-top:4px; font-size:0.9em; color:#666">
-                                    	<em>${m.details}</em>
-                                    </div>
-                                </div>
-                                <div class="rec">
-                                    <span>1870 Relation Found</span>
-                                    <strong>${rRel.full_name || 'Unknown'}</strong>
-                                    <span>ID: ${rRel.egoid || '?'}</span>
-                                    <span>Age: ${1870 - (parseInt(rRel.birth_year) || 1870)} | ${rRel.occupation}</span>
-                                    <span>Relation: ${rRel.relation || '-'}</span>
-                                </div>
-                            </div>
-                        </div>`;
-					});
-				} else {
-					// STANDARD RENDERER (Match / Dedup)
-					data.forEach(m => {
-						let cls = 'score-low';
-						let scoreStyle = 'font-size:1.1em;';
-						if (m.score > 90) cls = 'score-high';
-						else if (m.score >= 80) cls = 'score-med';
-
-						if (m.score < 0) scoreStyle += ' color: #e11d48;'; // Pink for negative points
-
-						const detailsHtml = (m.details || '').split(', ').map(d => {
-							let ext = '';
-							const lower = d.toLowerCase();
-							if (lower.includes('mismatch') || lower.includes('gap') || lower.includes('regress') || lower.includes('contradictory') || d.match(/-\d+/)) {
-								ext = ' ev-negative';
-							}
-							return `<span class="ev-tag${ext}">${d}</span>`;
-						}).join('');
-
-						html += `
-							<div class="match-item" data-lver="${m.rVerified.line}" data-l80="${m.r80.line}">
-								<div class="match-header">
-									<span class="badge ${cls}" style="${scoreStyle}">${m.score}</span>
+					html += `
+						<div class="match-item" data-lver="${m.rVerified.line}" data-l80="${m.r80.line}">
+							<div class="match-header">
+								<span class="badge ${cls}" style="${scoreStyle}">${m.score}</span>
+							</div>
+							<div class="match-grid">
+								<div class="rec">
+									<span>Verified (Line ${m.rVerified.line})</span>
+									<strong>${m.rVerified.full_name}</strong>
+									<span>Age: ${1870 - (parseInt(m.rVerified.birth_year) || 1870)} | Born: ${m.rVerified.birth_year} | ${m.rVerified.birth_place} | ${m.rVerified.race}/${m.rVerified.gender}</span>
+									<span>Occ: ${m.rVerified.occupation}</span>
+									<span>Household: ${this.getHouseholdMembers(m.rVerified, this.dsA)}</span>
 								</div>
-								<div class="match-grid">
-									<div class="rec">
-										<span>${this.mode === 'dedup' ? 'Rec A' : 'Verified'} (Line ${m.rVerified.line})</span>
-										<strong>${m.rVerified.full_name}</strong>
-										<span>Age: ${1870 - (parseInt(m.rVerified.birth_year) || 1870)} | Born: ${m.rVerified.birth_year} | ${m.rVerified.birth_place} | ${m.rVerified.race}/${m.rVerified.gender}</span>
-										<span>Occ: ${m.rVerified.occupation}</span>
-										<span>Household: ${this.getHouseholdMembers(m.rVerified, this.dsA)}</span>
-									</div>
-									<div class="rec">
-										<span>${this.mode === 'dedup' ? 'Rec B' : '1880'} (Line ${m.r80.line})</span>
-										<strong>${m.r80.full_name}</strong>
-										<span>Age: ${(this.mode === 'dedup' ? 1870 : 1880) - (parseInt(m.r80.birth_year) || (this.mode === 'dedup' ? 1870 : 1880))} | Born: ${m.r80.birth_year} | ${m.r80.birth_place} | ${m.r80.race}/${m.r80.gender}</span>
-										<span>Occ: ${m.r80.occupation}</span>
-										<span>Household: ${this.getHouseholdMembers(m.r80, this.dsB)}</span>
-									</div>
-								</div>
-								<div class="evidence-list">
-									${detailsHtml}
+								<div class="rec">
+									<span>1880 (Line ${m.r80.line})</span>
+									<strong>${m.r80.full_name}</strong>
+									<span>Age: ${1880 - (parseInt(m.r80.birth_year) || 1880)} | Born: ${m.r80.birth_year} | ${m.r80.birth_place} | ${m.r80.race}/${m.r80.gender}</span>
+									<span>Occ: ${m.r80.occupation}</span>
+									<span>Household: ${this.getHouseholdMembers(m.r80, this.dsB)}</span>
 								</div>
 							</div>
-						`;
-					});
-				}
+							<div class="evidence-list">
+								${detailsHtml}
+							</div>
+						</div>
+					`;
+				});
 				$list.html(html);
 			}
 
@@ -938,436 +766,37 @@ const App = {
 		document.body.removeChild(link);
 	},
 
-	exportCSV: function ()                                                         // EXPORT
+	exportCSV: function ()                                                         // EXPORT MATCH RESULTS
 	{
-		this.log("Exporting Results...");
-
-		if (this.mode === 'dedup') {
-			// DEDUP MODE: theLine, theChange
-			const changes = [];
-			const allTiers = [...this.tier1, ...this.tier2, ...this.tier3];
-
-			allTiers.forEach(m => {
-				changes.push({
-					theLine: m.rVerified.line,
-					theChange: `Duplicate of Line ${m.r80.line} (Score: ${m.score})`
-				});
-			});
-
-			if (changes.length === 0) {
-				alert("No matches found.");
-				return;
-			}
-
-			const csv = Papa.unparse(changes);
-			const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-			const link = document.createElement("a");
-			const url = URL.createObjectURL(blob);
-			link.setAttribute("href", url);
-			link.setAttribute("download", "duplicates.csv");
-			document.body.appendChild(link);
-			link.click();
-			document.body.removeChild(link);
-
-		} else if (this.mode === 'match') {
-			// MATCH MODE: Update 1880 egoid column & Copy to Clipboard
-			const cutoffStr = prompt("Enter cutoff score (e.g. 90):", "90");
-			if (cutoffStr === null) return;
-			const cutoff = parseInt(cutoffStr, 10) || 90;
-
-			this.log(`Applying cutoff ${cutoff} to matches...`);
-
-			// 1. Clear 1880 egoid column 
-			const newEgoids = new Map(); // Map<Line1880, NewValue>
-
-			// 2. Process Matches
-			const allTiers = [...this.tier1, ...this.tier2, ...this.tier3];
-
-			let matchCount = 0;
-			allTiers.forEach(m => {
-				if (m.score >= cutoff) {
-					if (m.rVerified.egoid) {
-						// "add the egoid of the verified row to the egoid column of the 1880 row"
-						const val = m.rVerified.egoid;
-						newEgoids.set(String(m.r80.line), val);
-						matchCount++;
-					}
-				}
-			});
-
-			this.log(`Updated ${matchCount} 1880 records with 1870 IDs.`);
-
-			// 3. Copy 1880 egoid column to clipboard
-			const rows = [];
-
-			this.data1880.forEach(r => {
-				const keys = String(r.line);
-				const val = newEgoids.get(keys) || '';
-				rows.push(val);
-			});
-
-			const clipboardText = rows.join('\n');
-
-			if (navigator.clipboard && navigator.clipboard.writeText) {
-				navigator.clipboard.writeText(clipboardText).then(() => {
-					alert(`Match Mode: Copied 1880 egoid column (${rows.length} rows) to clipboard.\nMatches applied: ${matchCount}`);
-				}).catch(e => this.fallbackCopy(clipboardText, rows.length));
-			} else {
-				this.fallbackCopy(clipboardText, rows.length);
-			}
-
-		} else if (this.mode === 'relations') {
-			// RELATIONS MODE: Async Update with Progress Bar
-			const allTiers = [...this.tier1, ...this.tier2, ...this.tier3];
-			const total = allTiers.length;
-
-			this.log("Starting Relations Export...");
-			this.progress(0, "Updating Verified Data (Pass 1: Spouses)...");
-
-			// PASS 1: SPOUSES ONLY
-			// "set spouses first"
-			let spouseUpdateCount = 0;
-			allTiers.forEach(c => {
-				const details = (c.details || '').toLowerCase();
-				if (details.includes('spouse')) {
-					const headID = c.head.egoid;
-					const relID = c.relation.egoid;
-
-					const headRec = this.dataVerified.find(r => r.egoid == headID);
-					const relRec = this.dataVerified.find(r => r.egoid == relID);
-
-					if (headRec && relRec) {
-						// "set the spouses field in the row where egoid = head to rel."
-						headRec.spouses = relID;
-						// "set the spouses field in the row where egoid = rel to head."
-						relRec.spouses = headID;
-						spouseUpdateCount++;
-					}
-				}
-			});
-
-			this.log(`Pass 1 Complete: ${spouseUpdateCount} spouse links created.`);
-			this.progress(10, "Updating Verified Data (Pass 2: Relations)...");
-
-			// PASS 2: OTHER RELATIONS - Async Chunking
-			let updateCount = 0;
-			let processed = 0;
-			const CHUNK = 50;
-
-			const processRelationsChunk = () => {
-				const limit = Math.min(processed + CHUNK, total);
-
-				for (let i = processed; i < limit; i++) {
-					const c = allTiers[i];
-					const details = (c.details || '').toLowerCase();
-
-					// Skip processing spouses calling logic again, already done
-					if (details.includes('spouse')) continue;
-
-					const headID = c.head.egoid;
-					const relID = c.relation.egoid;
-					const headRec = this.dataVerified.find(r => r.egoid == headID);
-					const relRec = this.dataVerified.find(r => r.egoid == relID);
-
-					if (!headRec || !relRec) continue;
-
-					// "spouse = candidate.spouses[0].egoid" (lookup from verified data)
-					const spouseID = headRec.spouses ? headRec.spouses.split(',')[0].trim() : null;
-
-					if (details.includes('mother')) {
-						// "add to the mother field in the row where egoid = rel to head"
-						relRec.mother = headID;
-						updateCount++;
-					}
-
-					if (details.includes('father')) {
-						// "add to the father field in the row where egoid = rel to head"
-						relRec.father = headID;
-						updateCount++;
-					}
-
-					if (details.includes('child') && !details.includes('grand')) {
-						// Child Logic
-
-						// "add CHI- + head to the children field in the row where egoid = rel to head"
-						let rKids = (relRec.children || '').trim();
-						if (rKids && !rKids.endsWith(',') && rKids.length > 0) rKids += ', ';
-						relRec.children = rKids + "CHI-" + headID;
-
-						// CRITICAL: Add to Head's children so CHI- inheritance works for siblings
-						let hKids = (headRec.children || '').trim();
-						if (hKids && !hKids.endsWith(',') && hKids.length > 0) hKids += ', ';
-						headRec.children = hKids + relID;
-
-						// "add to the children field in the row where egoid = spouse to rel"
-						if (spouseID) {
-							const spouseRec = this.dataVerified.find(r => r.egoid == spouseID);
-							if (spouseRec) {
-								let sKids = (spouseRec.children || '').trim();
-								if (sKids && !sKids.endsWith(',') && sKids.length > 0) sKids += ', ';
-								spouseRec.children = sKids + relID;
-
-								// "set the father field in the row where egoid = rel to spouse"
-								relRec.father = spouseID;
-							}
-						}
-
-						// "set the mother field in the row where egoid = rel to head"
-						relRec.mother = headID;
-
-						updateCount++;
-					}
-
-					// Combined Sibling Logic
-					if (details.includes('sibling')) {
-						// "add SIB- + head to the siblings field in the row where egoid = rel to head"
-						let rSibs = (relRec.siblings || '').trim();
-						if (rSibs && !rSibs.endsWith(',') && rSibs.length > 0) rSibs += ', ';
-						relRec.siblings = rSibs + "SIB-" + headID;
-
-						// "add to the siblings field in the row where egoid = rel followed by a commma and a space"
-						// Implies adding Rel to Head (Reciprocity) or potentially adding Head to Rel?
-						// Given SIB-Head is already added to Rel, adding Head to Rel is redundant.
-						// We'll perform reciprocity: Add Rel to Head.
-						let hSibs = (headRec.siblings || '').trim();
-						if (hSibs && !hSibs.endsWith(',') && hSibs.length > 0) hSibs += ', ';
-						headRec.siblings = hSibs + relID;
-
-						updateCount++;
-					}
-
-					if (details.includes('cousin')) {
-						// "add COU- + head to the cousins field in the row where egoid = rel to head"
-						let rCousins = (relRec.cousins || '').trim();
-						if (rCousins && !rCousins.endsWith(',') && rCousins.length > 0) rCousins += ', ';
-						relRec.cousins = rCousins + "COU-" + headID;
-
-						// "add to the cousins field in the row where egoid = rel" (Reciprocity: Head)
-						let hCousins = (headRec.cousins || '').trim();
-						if (hCousins && !hCousins.endsWith(',') && hCousins.length > 0) hCousins += ', ';
-						headRec.cousins = hCousins + relID;
-
-						updateCount++;
-					}
-
-					if (details.includes('nibling')) {
-						// "add to the niblings field in the row where egoid = head to rel"
-						let hNibs = (headRec.niblings || '').trim();
-						if (hNibs && !hNibs.endsWith(',') && hNibs.length > 0) hNibs += ', ';
-						headRec.niblings = hNibs + relID;
-
-						// "add to the niblings field in the row where egoid = spouse to rel"
-						if (spouseID) {
-							const spouseRec = this.dataVerified.find(r => r.egoid == spouseID);
-							if (spouseRec) {
-								let sNibs = (spouseRec.niblings || '').trim();
-								if (sNibs && !sNibs.endsWith(',') && sNibs.length > 0) sNibs += ', ';
-								spouseRec.niblings = sNibs + relID;
-							}
-						}
-						updateCount++;
-					}
-
-					if (details.includes('grand') && (details.includes('child') || details.includes('grand'))) {
-						// "add to the grandchildren field in the row where egoid = head to rel"
-						let hGrand = (headRec.grandchildren || '').trim();
-						if (hGrand && !hGrand.endsWith(',') && hGrand.length > 0) hGrand += ', ';
-						headRec.grandchildren = hGrand + relID;
-
-						// "add to the grandchildren field in the row where egoid = spouse to rel"
-						if (spouseID) {
-							const spouseRec = this.dataVerified.find(r => r.egoid == spouseID);
-							if (spouseRec) {
-								let sGrand = (spouseRec.grandchildren || '').trim();
-								if (sGrand && !sGrand.endsWith(',') && sGrand.length > 0) sGrand += ', ';
-								spouseRec.grandchildren = sGrand + relID;
-							}
-						}
-						updateCount++;
-					}
-
-
-
-				} // End Chunk Loop
-
-				processed = limit;
-				const pct = 10 + Math.round((processed / total) * 90);
-				this.progress(pct, `Updating Relations (${processed}/${total})`);
-
-				if (processed < total) {
-					setTimeout(processRelationsChunk, 0);
-				} else {
-					this.finishRelationsExport(updateCount + spouseUpdateCount);
-				}
-			};
-
-			processRelationsChunk(); // Start Async
-		}
-	},
-
-	finishRelationsExport: function (updateCount) {
-		this.progress(100, "Processing Sibling/Cousin Inheritance...");
-
-		// "when done with all candidates"
-		let inheritanceCount = 0;
-
-		this.dataVerified.forEach(row => {
-
-			// 1. CHILDREN (CHI-) -> SIBLINGS
-			// "if the children field in the row contains CHI-"
-			if (row.children && row.children.includes('CHI-')) {
-				let currentKids = row.children.split(',').map(s => s.trim()).filter(s => s);
-				let newKids = new Set();
-				let inheritedSibs = new Set();
-				let changed = false;
-
-				currentKids.forEach(kid => {
-					if (kid.startsWith('CHI-')) {
-						// "remove CHI- from the children field"
-						const targetID = kid.replace('CHI-', '');
-
-						// "get the value of the children field in that row [Target Head]"
-						const targetRec = this.dataVerified.find(r => r.egoid == targetID);
-						if (targetRec && targetRec.children) {
-							const targetChildren = targetRec.children.split(',').map(s => s.trim()).filter(s => s);
-							targetChildren.forEach(tc => {
-								if (!tc.startsWith('CHI-')) {
-									// "add that to the siblings field in the orginal row"
-									inheritedSibs.add(tc);
-								}
-							});
-						}
-						changed = true;
-						// Don't add CHI- marker back to children
-					} else {
-						newKids.add(kid);
-					}
-				});
-
-				if (changed) {
-					row.children = Array.from(newKids).join(', ');
-
-					let currentSibs = (row.siblings || '').split(',').map(s => s.trim()).filter(s => s);
-					let finalSibs = new Set(currentSibs);
-					inheritedSibs.forEach(s => finalSibs.add(s));
-
-					if (row.egoid) finalSibs.delete(String(row.egoid)); // Remove self
-					row.siblings = Array.from(finalSibs).join(', ');
-					inheritanceCount++;
-				}
-			}
-
-			// 2. SIBLINGS (SIB-) -> SIBLINGS
-			// "if the siblings field in the row contains SIB-"
-			if (row.siblings && row.siblings.includes('SIB-')) {
-				let currentSibs = row.siblings.split(',').map(s => s.trim()).filter(s => s);
-				let newSibs = new Set();
-				let changed = false;
-
-				currentSibs.forEach(sib => {
-					if (sib.startsWith('SIB-')) {
-						// "remove SIB- from the siblings field"
-						const targetID = sib.replace('SIB-', '');
-
-						// "get the value of the siblings field in that row"
-						const targetRec = this.dataVerified.find(r => r.egoid == targetID);
-						if (targetRec && targetRec.siblings) {
-							const targetSibs = targetRec.siblings.split(',').map(s => s.trim()).filter(s => s);
-							targetSibs.forEach(ts => {
-								if (!ts.startsWith('SIB-')) {
-									// "add that to the siblings field in the original row"
-									newSibs.add(ts);
-								}
-							});
-						}
-						// Also implies adding the TargetID itself? Prompt vague.
-						// "Sibling of X" means X is sibling. Usually yes.
-						newSibs.add(targetID);
-
-						changed = true;
-					} else {
-						newSibs.add(sib);
-					}
-				});
-
-				if (changed) {
-					if (row.egoid) newSibs.delete(String(row.egoid));
-					row.siblings = Array.from(newSibs).join(', ');
-					inheritanceCount++;
-				}
-			}
-
-			// 3. COUSINS (COU-) -> COUSINS
-			// "if the cousins field in the row contains COU-"
-			if (row.cousins && row.cousins.includes('COU-')) {
-				let currentCousins = row.cousins.split(',').map(s => s.trim()).filter(s => s);
-				let newCousins = new Set();
-				let changed = false;
-
-				currentCousins.forEach(c => {
-					if (c.startsWith('COU-')) {
-						// "remove COU- from the cousins field"
-						const targetID = c.replace('COU-', '');
-
-						// "get the value of the cousins field in that row"
-						const targetRec = this.dataVerified.find(r => r.egoid == targetID);
-						if (targetRec && targetRec.cousins) {
-							const targetCousins = targetRec.cousins.split(',').map(s => s.trim()).filter(s => s);
-							targetCousins.forEach(tc => {
-								if (!tc.startsWith('COU-')) {
-									// "add that to the cousins field in the orginal row"
-									newCousins.add(tc);
-								}
-							});
-						}
-						// Add target?
-						newCousins.add(targetID);
-
-						changed = true;
-					} else {
-						newCousins.add(c);
-					}
-				});
-
-				if (changed) {
-					if (row.egoid) newCousins.delete(String(row.egoid));
-					row.cousins = Array.from(newCousins).join(', ');
-					inheritanceCount++;
+		this.log("Exporting Results...");                                          // Log start
+		const cutoffStr = prompt("Enter cutoff score (e.g. 90):", "90");              // Ask for cutoff
+		if (cutoffStr === null) return;                                            // Cancel check
+		const cutoff = parseInt(cutoffStr, 10) || 90;                                // Parse cutoff
+		this.log(`Applying cutoff ${cutoff} to matches...`);                       // Log cutoff
+		const newEgoids = new Map();                                                 // Egoids map
+		const allTiers = [...this.tier1, ...this.tier2, ...this.tier3];              // All cands
+		let matchCount = 0;                                                          // Match count
+		allTiers.forEach(m => {                                                      // Loop cands
+			if (m.score >= cutoff) {                                               // Check cutoff
+				if (m.rVerified.egoid) {                                           // Check egoid
+					newEgoids.set(String(m.r80.line), m.rVerified.egoid);          // Map 1880 line -> 1870 egoid
+					matchCount++;                                                  // Increment count
 				}
 			}
 		});
-
-		this.log(`Inheritance processing complete. Updated ${inheritanceCount} records.`);
-		this.progress(100, "Copying to Clipboard...");
-
-		const headers = ['maiden_name', 'spouses', 'mother', 'father', 'uncles', 'aunts', 'grandmother', 'grandfather', 'siblings', 'niblings', 'cousins', 'children', 'grandchildren'];
-		const rows = [];
-
-		this.dataVerified.forEach(r => {
-			const row = headers.map(h => r[h] || '').join('\t');
-			rows.push(row);
+		this.log(`Updated ${matchCount} 1880 records with 1870 IDs.`);             // Log count
+		const rows = [];                                                             // Rows array
+		this.data1880.forEach(r => {                                                 // Loop 1880 data
+			const val = newEgoids.get(String(r.line)) || '';                         // Get egoid
+			rows.push(val);                                                        // Add to rows
 		});
-
-		const clipboardText = headers.join('\t') + '\n' + rows.join('\n');
-
-		// Helper to finalize
-		const finish = () => {
-			this.log(`Relations Mode: Updated ${updateCount} records locally (plus ${inheritanceCount} inheritance updates).`);
-			console.log(`Relations Mode: Copied ${rows.length} rows to clipboard.\nUpdates Applied: ${updateCount}\nInheritance Updates: ${inheritanceCount}`);
-			this.progress(0, "Idle");
-			// Short Beep (Console Bell equivalent / Log)
-			console.log("\x07");
-		};
-
-		if (navigator.clipboard && navigator.clipboard.writeText) {
-			navigator.clipboard.writeText(clipboardText).then(finish).catch(err => {
-				console.error("Clipboard failed", err);
-				this.fallbackCopy(clipboardText, rows.length);
-				this.progress(0, "Idle");
-			});
+		const clipboardText = rows.join('\n');                                       // Join rows
+		if (navigator.clipboard && navigator.clipboard.writeText) {                 // Clipboard support
+			navigator.clipboard.writeText(clipboardText).then(() => {                // Copy to clipboard
+				alert(`Match Mode: Copied 1880 egoid column (${rows.length} rows) to clipboard.\nMatches applied: ${matchCount}`);
+			}).catch(e => this.fallbackCopy(clipboardText, rows.length));            // Fallback
 		} else {
-			this.fallbackCopy(clipboardText, rows.length);
-			this.progress(0, "Idle");
+			this.fallbackCopy(clipboardText, rows.length);                         // Fallback
 		}
 	},
 
